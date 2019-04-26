@@ -1,0 +1,7 @@
+[book]
+title = "Lokathor's Github Pages"
+authors = ["Lokathor"]
+
+[build]
+build-dir = "book-output"
+create-missing = true
