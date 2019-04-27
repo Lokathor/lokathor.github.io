@@ -221,15 +221,15 @@ also so that we can trigger the effects at the appropriate times. Time "passes"
 every time we fill in one sample of the buffer. Time can't pass in less than one
 sample worth of time.
 
-Our sound sound waves are discrete, not continuous. This means that instead of
-being a mathematically described wave form that's precise out to infinite
-precision, we've got a very definite amount of precision. In fact our waves are
-ultimately just like the sound buffer we're filling: a series of sample
-"**chunks**", and the wave form's output frequency is like the samples per
-second. We'll call them chunks instead of also calling them samples so that it's
-clear when we're talking about sound source and when we're talking about sound
-destination. The way that we determine the output sample value depends on the
-output frequency of the wave form (in comparison to our 48k samples per second):
+Our sound waves are discrete, not continuous. This means that instead of being a
+mathematically described wave form that's precise out to infinite precision,
+we've got a very definite amount of precision. In fact our waves are ultimately
+just like the sound buffer we're filling: a series of sample "**chunks**", and
+the wave form's output frequency is like the samples per second. We'll call them
+chunks instead of also calling them samples so that it's clear when we're
+talking about sound source and when we're talking about sound destination. The
+way that we determine the output sample value depends on the output frequency of
+the wave form (in comparison to our 48k samples per second):
 
 * **Low Frequency** wave forms will advance _one or less_ chunks per sample,
   which makes it easy to process. We advance a bit, check the value of the
