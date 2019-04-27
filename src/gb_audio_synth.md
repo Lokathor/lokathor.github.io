@@ -3,24 +3,25 @@ Recently a thing called [GB Studio](https://www.gbstudio.dev/) came out that
 revived a bit of public interest in the Game Boy as a system. It's neat. Like
 having RPG Maker for the Game Boy. You probably couldn't use it to make a super
 high complexity Game Boy game, the Game Boy hardware is really just _so_ limited
-you really need to be programming in ASM. Still, for beginners who just want to
+that you need to be programming in ASM. Still, for beginners who just want to
 try things out it's always better to have it than not have it.
 
-Well, in that spirit, what if we wanted to reproduce some elements of the Game
-Boy experience without living by the _actual_ Game Boy hardware limits?
+Well, in a similar spirit, what if we wanted to reproduce some elements of the
+Game Boy experience without living by the _actual_ Game Boy hardware limits?
 Something like Shovel Knight, or Sonic Mania, where you start with the look and
 sound of an old console game, and then [break past the real
 limit](https://yachtclubgames.com/2014/07/breaking-the-nes/) of what the
-hardware at the time could do.
+hardware at the time could really do in just a few ways.
 
 # Game Boy Audio Synthesis
 
 We're gonna be making some sounds that sound like the sounds the Game Boy made.
 
-We'll be making a system that has an authentic sound output, but is easy to
+We'll be making a system that has an authentic sounding output, but is easy to
 control in the style of a modern library. It obviously will be brazenly
 wasteful, using entire _bytes_ to store a number when just 2 bits could have
-done the job. Yet, despite this, I think it will turn out great.
+done the job, things like that. Yet, despite this, I think it will turn out
+great.
 
 * **Just to be clear from the start:** this will _not_ end with a system ready
   made for use as part of of a Game Boy emulator. We won't bother to follow the
@@ -29,7 +30,7 @@ done the job. Yet, despite this, I think it will turn out great.
   I think this will still be a helpful explanation to read, but you'll have to
   be stricter about how you implement things in your emulator's version.
 
-I will be writing the actual code in Rust, but the theory is the same for any
+I will be writing the code samples in Rust, but the theory is the same for any
 programming language, and I will attempt to keep my use of any Rust magic to a
 relative minimum so that programmers from other languages can also follow along.
 
@@ -55,7 +56,7 @@ to have watched the sound portion of _The Ultimate Game Boy Talk_ at least once
 
 ## Some Terms
 
-Let's define just a few terms before we go on:
+Just a few terms before we go on:
 
 * **DMG:** The Game Boy's production identifier was DMG for "Dot-Matrix Game".
   I've been trying to not type "DMG" before this point in the document and it's
@@ -80,6 +81,8 @@ Let's define just a few terms before we go on:
   other format if you need. The sample value itself represents how far forward
   or back the speaker should position [its
   magnet](https://en.wikipedia.org/wiki/Loudspeaker).
+* **Frequency:** A frequency is some number of cycles per second. A frequency
+  value is measured in hertz (Hz): 1 Hz is one cycle per second.
 * **Samples Per Second / Sample Rate:** If a sample is like a pixel for sound,
   your samples _per second_ is like your pixels per inch in a picture. Just like
   how more pixels per inch gives a clearer image, more samples per second gives
@@ -87,8 +90,9 @@ Let's define just a few terms before we go on:
   frequencies](https://en.wikipedia.org/wiki/Sampling_(signal_processing)#Sampling_rate).
   You don't want to go overboard if the situation doesn't call for it: the down
   side to having more samples per second is that it takes more time to compute
-  the sound and it takes more memory to store. We'll use 48,000 Hz as our sample
-  rate, which is the "basic" level of professional quality.
+  the sound and it takes more memory to store. We'll use 48,000 samples per
+  second as our target output rate, which is the "basic" level of professional
+  quality.
 * **Voice:** In _The Ultimate Game Boy Talk_ the term
   "[voice](https://www.rolandcorp.com.au/blog/a-to-z-synthesizer#SGVoice)" is
   used to mean each of the four types of sounds that a Game Boy could make.
@@ -99,24 +103,12 @@ Let's define just a few terms before we go on:
 
 Obviously there's many sound APIs available, but they all fundamentally involve
 filling a buffer that's calibrated to a given samples per second with sound
-samples, then those sound sample go out to the sound card which plays them on
-the speaker. Or maybe they're saved to disk for playback later.
+samples. The details of when our synthesizer gets called with a buffer to fill
+out aren't too important, we'll just assume that we're given a playback speed
+and a buffer to fill and we will fill out as much buffer as we're given.
 
-Assuming that we're producing sound out to the sound card on the fly, we might
-need to fill the sound buffer in a callback that the sound card executes when
-the speakers are about to run out of samples, or we might need to enqueue
-samples ourselves at some regular rate. It's actually fairly uninteresting which
-style is used, so we will only concern ourselves here with the idea of filling a
-sound buffer that we've been assigned to fill. When exactly that happens is for
-somebody else to think about.
-
-We'll assume that the caller is giving us two values:
-
-* The sample rate of the buffer to fill
-* The buffer to fill
-
-Since we'll have to definitely keep our left channel and right channel clear,
-let's make a struct for a single sample with `left` and `right` fields:
+Let's make a struct for the buffer's data, so we can label the left and right
+channels in the output.
 
 ```rust
 /// A single moment of stereo sound.
@@ -141,7 +133,101 @@ output might be:
 ///
 /// Naturally, this changes the state of the APU, as timers tick up, reset,
 /// change various fields, etc.
-pub fn make_the_sound(config: &mut APU, sample_rate: i32, buffer: &mut [StereoI16]) {
+///
+/// The **caller** must zero out the sample buffer between sound outputs.
+pub fn synth_sound(config: &mut APU, rate: i32, buffer: &mut [StereoI16]) {
   unimplemented!("TODO: all of it")
 }
 ```
+
+## APU Basics
+
+What's inside our APU struct? Well we can start with what the DMG really has
+for sound registers and then add more if we need to.
+
+Obviously there's the four voices, which we'll get to in a moment, but there's
+also some other registers that aren't part of a voice which we should consider:
+
+* **FF24/NR50:** This controls the levels for Sound Out 2 (left) and Sound Out 1
+  (right), as well as if the Vin should go out to the left and right. No game
+  ever used the Vin, so we won't consider it. The volume levels range from 0 to
+  7, so we'll use a byte for that per channel.
+
+```rust
+pub struct APU {
+  pub left_volume: u8,
+  pub right_volume: u8,
+}
+```
+
+* **FF25/NR51:** This register has flags for if a given voice should output to a
+  particular side or not. This is an area where we can break past the real
+  limits a bit, so we'll just store one volume level byte per channel per
+  voice.
+
+```rust
+pub struct APU {
+  pub left_volumes: [u8; 4],
+  pub right_volumes: [u8; 4],
+}
+```
+
+* **FF26/NR52:** Finally there's a register where we can check if a sound is on
+  and enable or disable the entire sound system. On a real Game Boy you get like
+  13% more battery life if sound is entirely off like that because the sound
+  hardware uses power to run even if volume levels are 0. In our software
+  synthesizer we can just _not call the function_ if we want to skip sound
+  processing, so we won't bother to model this part.
+
+Okay, now we'll add one field for each voice. Except, when you're setting the
+configuration for a particular voice, you probably want the volume level to be a
+part of that voice's info. So we'll take the volume fields out of the `APU`
+struct and put them into the struct for each particular voice. Also we'll derive
+some traits for our struct.
+
+```rust
+#[derive(Debug, Clone, Default)]
+pub struct APU {
+  // empty
+}
+```
+
+Great! No code obviously means no bugs! And fast compiles.
+
+## Voice Basics
+
+Before we jump into handling any specific voice, we have a lot to cover about
+how to process a voice in general.
+
+Everything related to DMG sound happens at some frequency.
+
+* Every voice's wave form has a highly variable frequency. Depending on the
+  voice, this can go from between 32 Hz up to 524,288 Hz. Usual frequencies for
+  "music" sorts of things are likely to be 65 Hz (C-2) up through maybe 2,093 Hz
+  (C-7), but sound effects might easily go higher.
+* The "Sweep" effect (Pulse A), if active, triggers in N * 1/128th of a second
+  intervals, where N can be 1 through 7.
+* The "Envelope" effect (Pulse A, Pulse B, and Noise), if active, triggers in
+  N * 1/64th of a second intervals, where again N can be 1 through 7.
+* The "Length" effect (all voices), if set, will automatically stops a voice
+  after N * 1/256th of a second. In a real DMG the maximum Length you can set
+  depends on the voice, but we'll just let all voice timeouts go up to 255.
+
+We need to keep track of how time is passing as we're filling out the buffer so
+that we can advance through the wave forms at the appropriate frequency, and
+also so that we can trigger the effects at the appropriate times.
+
+Our sound stored sound waves are discrete, not continuous. This means that all
+of our waves have "chunks" to them. When we advance a counter through a wave
+form we want to track each chunk we cross over.
+
+* **Low Frequency** wave forms will advance one or less chunks per sample, which
+  makes it easy to process. We advance a bit, check the value of the current
+  chunk, and that's our value for that sample. Easy.
+* **High Frequency** wave forms will advance more than one chunk per sample, and
+  then we have to average together the value of all the chunks we cross over
+  during that sample. It's a lot more fiddly.
+
+What exactly constitutes low or high frequency for these purposes depends on how
+many chunks there are in the wave form's loop. More chunks means that each chunk
+is a smaller amount of time within the wave form.
