@@ -215,19 +215,46 @@ Everything related to DMG sound happens at some frequency.
 
 We need to keep track of how time is passing as we're filling out the buffer so
 that we can advance through the wave forms at the appropriate frequency, and
-also so that we can trigger the effects at the appropriate times.
+also so that we can trigger the effects at the appropriate times. Time "passes"
+every time we fill in one sample of the buffer. Time can't pass in less than one
+sample worth of time.
 
-Our sound stored sound waves are discrete, not continuous. This means that all
-of our waves have "chunks" to them. When we advance a counter through a wave
-form we want to track each chunk we cross over.
+Our sound sound waves are discrete, not continuous. This means that instead of
+being a mathematically described wave form that's precise out to infinite
+precision, we've got a very definite amount of precision. In fact our waves are
+ultimately just like the sound buffer we're filling: a series of sample
+"**chunks**", and the wave form's output frequency is like the samples per
+second. We'll call them chunks instead of also calling them samples so that it's
+clear when we're talking about sound source and when we're talking about sound
+destination. The way that we determine the output sample value depends on the
+output frequency of the wave form (in comparison to our 48k samples per second):
 
-* **Low Frequency** wave forms will advance one or less chunks per sample, which
-  makes it easy to process. We advance a bit, check the value of the current
-  chunk, and that's our value for that sample. Easy.
-* **High Frequency** wave forms will advance more than one chunk per sample, and
-  then we have to average together the value of all the chunks we cross over
+* **Low Frequency** wave forms will advance _one or less_ chunks per sample,
+  which makes it easy to process. We advance a bit, check the value of the
+  current chunk, and that's our value for that sample. Easy.
+* **High Frequency** wave forms will advance _more than one_ chunk per sample,
+  and then we have to average together the value of all the chunks we cross over
   during that sample. It's a lot more fiddly.
 
-What exactly constitutes low or high frequency for these purposes depends on how
-many chunks there are in the wave form's loop. More chunks means that each chunk
-is a smaller amount of time within the wave form.
+The exact break point of where "low" and "high" frequency are depends on the
+number of chunks in the wave form.
+
+* The Wave voice has 32 chunks, provided by the user.
+* The Pulse A and Pulse B voices are described in terms of off and on time
+  percentage: 12.5%, 25%, 50%, or 75% (which sounds the same as 25%). We need a
+  minimum of 8 chunks to model all possible settings properly.
+* The Noise voice is somewhat different. Instead of storing a wave form like
+  Wave does, or having a very simple formula like the Pulse voices do, there's a
+  pseudo-random number generator that, depending on a setting, has either a 127
+  steps in the sequence or 32,767 steps in the sequence. Also, unlike the other
+  voices, the "frequency" of the Noise channel **doesn't** indicate how often
+  we do a _full loop_ of the sequence, it instead indicates how often we _do one
+  step_ of the pseudo-random sequence.
+
+### Effect Timer
+
+TODO
+
+### Wave Form Timer
+
+TODO
