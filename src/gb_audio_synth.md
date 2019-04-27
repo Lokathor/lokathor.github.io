@@ -140,10 +140,12 @@ pub fn synth_sound(config: &mut APU, rate: i32, buffer: &mut [StereoI16]) {
 }
 ```
 
-## APU Basics
+## Audio Processing Unit (APU) Basics
 
-What's inside our APU struct? Well we can start with what the DMG really has
-for sound registers and then add more if we need to.
+The Audio Processing Unit, which emits all the sound data, is called the APU for
+short. We definitely want a struct for this, it sounds very important to the
+whole sound process. What's inside our APU struct? Well we can start with what
+the DMG really has for sound registers and then add more if we need to.
 
 Obviously there's the four voices, which we'll get to in a moment, but there's
 also some other registers that aren't part of a voice which we should consider:
