@@ -248,14 +248,165 @@ number of chunks in the wave form.
 * The Noise voice is somewhat different. Instead of storing a wave form like
   Wave does, or having a very simple formula like the Pulse voices do, there's a
   pseudo-random number generator that, depending on a setting, has either a 127
-  steps in the sequence or 32,767 steps in the sequence. Also, unlike the other
-  voices, the "frequency" of the Noise channel **doesn't** indicate how often
-  we do a _full loop_ of the sequence, it instead indicates how often we _do one
-  step_ of the pseudo-random sequence.
+  steps in the sequence or 32,767 steps in the sequence. Also, **unlike the
+  other voices**, the "frequency" of the Noise channel doesn't indicate how
+  often we do a _full loop_ of the sequence, it instead indicates how often we
+  _do one step_ of the pseudo-random sequence. If we treat it as having a
+  "chunks / cycle" value of 1 then it'll kinda fit into the rest of our math.
+
+What's the exact formula to find the high/low break point? We have to go back to
+basic algebra / physics sorts of math for this one. There's many figures here,
+each of them has an associated dimensional units, and we must track how the
+units change as we multiply and divide different figures by each other.
+
+Here's our base terms:
+
+| Term | Dimensions |
+|:-----|:-----------|
+| sample_rate | samples / second |
+| frequency | cycles / second |
+| wave_chunks | chunks / cycle |
+
+Remember that when you divide one fraction by another fraction it's the same as
+multiplying the first fraction by the _inverse_ of the second fraction:
+
+* `(a/b)/(c/d) == (a/b)*(c/d)`
+
+So, if we combine some of those figures, these are how the dimensions change.
+The steps are written out to try and help you follow what's going on, because
+changing your dimensional units around is always a little tricky. Since all our
+stuff happens in terms of samples emitted, we're aiming to find out how we can
+compute `chunks / sample`.
+
+| Term | Dimensions |
+|:-----|:-----------|
+| sample_rate / frequency | (samples / second) / (cycles / second) |
+| sample_rate / frequency | (samples / second) * (seconds / cycle) |
+| sample_rate / frequency | samples / cycle |
+| (sample_rate / frequency) / wave_chunks | (samples / cycle) / (chunks / cycle) |
+| (sample_rate / frequency) / wave_chunks | (samples / cycle) * (cycles / chunk) |
+| (sample_rate / frequency) / wave_chunks | samples / chunk |
+| 1 / ((sample_rate / frequency) / wave_chunks) | 1 / (samples / chunk) |
+| 1 / ((sample_rate / frequency) / wave_chunks) | chunks / sample |
+| 1 * (wave_chunks / (sample_rate / frequency)) | chunks / sample |
+| wave_chunks / (sample_rate / frequency) | chunks / sample |
+
+* If there's more than one chunk per sample we have to average all the chunks in
+  that sample period together when computing the sample.
+* If there's one or less chunks per sample, each sample value comes from just a
+  single chunk.
+  
+If you wanted to be _even more accurate_ with your chunk sampling you could
+track when a partial chunk crossed a chunk bound and
+[lerp](https://en.wikipedia.org/wiki/Linear_interpolation) between them. For
+example, if your chunks per sample is 0.4, then your chunk positions for each
+sample would be at positions 0.4, 0.8, and then when you move to 1.2 you'd have
+crossed a chunk bound. During that particular sample of output you could lerp
+between chunk 0 in the array and chunk 1 in the array. I don't think that such
+levels of accuracy are really necessary to produce a nice DMG sound, but it's
+something you should consider for yourself when you're making your own synth.
 
 ### Effect Timer
 
-TODO
+So let's make a struct for tracking an effect timer. This one is pretty simple.
+
+```rust
+pub struct EffectTimer {
+  pub position: f32,
+  pub cycle_per_tick: f32
+}
+```
+
+And we want to construct one of these by saying something like "overflow every
+3/128ths of a second" or something. 
+
+```rust
+  let sweep_timer = EffectTimer::every(3, 128, samples_per_second);
+```
+
+I hope that makes sense. Then every time through a sample we'll tick all the
+appropriate effect timers and do the effects if they trigger.
+
+```rust
+  if envelope_timer.tick() {
+    // TODO: adjust the envelope settings here
+  }
+```
+
+Seem easy to use? I think so, I hope you think so. The methods look like this:
+
+```rust
+impl EffectTimer {
+  pub fn every(num: u32, denom: u32, samples_per_second: u32) -> Self {
+    let time_per_effect = num as f32 / denom as f32;
+    let samples_per_effect = time_per_effect * samples_per_second as f32;
+    let position_per_tick = 1.0 / samples_per_effect;
+    debug_assert!(position_per_tick < 1.0);
+    Self {
+      position: 0.0,
+      position_per_tick,
+    }
+  }
+
+  pub fn tick(&mut self) -> bool {
+    self.position += self.position_per_tick;
+    if self.position >= 1.0 {
+      self.position -= 1.0;
+      true
+    } else {
+      false
+    }
+  }
+}
+```
+
+does it work? We can write a test for that.
+
+```rust
+#[test]
+pub fn effect_timer_test() {
+  const SAMPLES_PER_SECOND: u32 = 48_000;
+  for &denom in &[64, 128, 256] {
+    for num in 1..=7 {
+      let mut timer = EffectTimer::every(num, denom, SAMPLES_PER_SECOND);
+      let mut rollovers = 0;
+      for _ in 0..(SAMPLES_PER_SECOND * num) {
+        if timer.tick() {
+          rollovers += 1;
+        }
+      }
+      assert!(rollovers == denom || rollovers + 1 == denom);
+    }
+  }
+}
+```
+
+Ah, and you might be wondering what's up with that assert. Yeah, because of
+floating point precision issues we won't always have our triggers fire quite
+when we want. They end up being a little bit slower than the correct frequency.
+Even if we switch to using `f64` instead of `f32` we'll have to face this fact.
+
+This basically happens because our output sample rate can't divide evenly into
+the sample rate. The DMG didn't suffer from this because it had the sound chip
+wired directly to the speakers. It didn't need to buffer samples, it just played
+them immediately. That allowed it to have an effective samples per second rate
+of **1,048,576**. That's _really_ high, but more importantly it divides evenly
+by 64, 128, and 256, so you can track the effect periods over an even number of
+samples.
+
+* We could double our output frequency (to 96k) and then we'd be at an even
+  multiple of 256. Then we can use just integers for everything and track time
+  in terms of 1/256th of a second units. Eg: a 7/128th of a second Sweep
+  interval can be tracked with a 1/256th second timer and then you wait for it
+  to roll over 14 times.
+* We could try to set up some fixed point math with enough fractional precision
+  so that we can always track small enough values and run whatever interval
+  effect timer we need. This is largely similar in spirit to the above option.
+* We could just accept some slop and not worry about it.
+
+For now we'll just accept the slop and not worry about it too much. As long as
+we're aware of where we're getting it wrong it's not so bad, and we can always
+choose to improve it later if we need to.
 
 ### Wave Form Timer
 
