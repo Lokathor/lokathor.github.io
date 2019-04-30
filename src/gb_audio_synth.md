@@ -33,6 +33,8 @@ great.
 I will be writing the code samples in Rust, but the theory is the same for any
 programming language, and I will attempt to keep my use of any Rust magic to a
 relative minimum so that programmers from other languages can also follow along.
+I will, for example, leave off the `derive` attributes and such, because they're
+usually not critical.
 
 ## Previous Work
 
@@ -107,12 +109,16 @@ samples. The details of when our synthesizer gets called with a buffer to fill
 out aren't too important, we'll just assume that we're given a playback speed
 and a buffer to fill and we will fill out as much buffer as we're given.
 
-Let's make a struct for the buffer's data, so we can label the left and right
-channels in the output.
+I'm using SDL2 for audio, and SDL2's
+[AudioSpec](https://wiki.libsdl.org/SDL_AudioSpec) type expects stereo samples
+to be stored in "LRLRLR..." ordering, so that's what we'll be doing. Let's make
+a struct for this so that we can clearly label the left and right part without
+having to remember which is which. The `repr(C)` part here is a slightly dumb
+low level detail that just means it's guaranteed to be laid out in memory just
+as C would do it, in order of the fields named.
 
 ```rust
 /// A single moment of stereo sound.
-#[derive(Debug, Clone, Copy, Default)]
 #[repr(C)]
 pub struct StereoI16 {
   pub left: i16,
@@ -120,10 +126,10 @@ pub struct StereoI16 {
 }
 ```
 
-The `repr(C)` means it's laid out in memory just as C would do it, in order of
-the fields named. Also, I chose to list `left` before `right` because that's the
-channel ordering that SDL2 uses. Obviously you should flip that around if your
-program's native sound API uses an inverted channel ordering.
+If you're targeting some other sound API then you can swap around the field
+ordering, change to another data format, whatever you need to do. The rest of
+our code will be done in terms of samples in general, so it should be easy
+enough to change the details of a sample if you really need to.
 
 Okay, now let's look at what the top-level function signature for our sound
 output might be:
@@ -134,7 +140,8 @@ output might be:
 /// Naturally, this changes the state of the APU, as timers tick up, reset,
 /// change various fields, etc.
 ///
-/// The **caller** must zero out the sample buffer between sound outputs.
+/// The buffer passed in is assumed to have been zeroed ahead of time, if
+/// necessary.
 pub fn synth_sound(config: &mut APU, rate: i32, buffer: &mut [StereoI16]) {
   unimplemented!("TODO: all of it")
 }
@@ -188,7 +195,6 @@ struct and put them into the struct for each particular voice. Also we'll derive
 some traits for our struct.
 
 ```rust
-#[derive(Debug, Clone, Default)]
 pub struct APU {
   // empty
 }
@@ -310,22 +316,17 @@ something you should consider for yourself when you're making your own synth.
 
 So let's make a struct for tracking an effect timer. This one is pretty simple.
 
-```rust
-pub struct EffectTimer {
-  pub position: f32,
-  pub cycle_per_tick: f32
-}
-```
-
-And we want to construct one of these by saying something like "overflow every
-3/128ths of a second" or something. 
+* **Use Case:** We want to construct one of these by saying something like
+  "overflow every 3/128ths of a second" or a similar value. We measure time in
+  samples per second so we need to calibrate it with that too.
 
 ```rust
   let sweep_timer = EffectTimer::every(3, 128, samples_per_second);
 ```
 
-I hope that makes sense. Then every time through a sample we'll tick all the
-appropriate effect timers and do the effects if they trigger.
+* **Use Case:** Every time through a sample we'll tick all the appropriate
+  effect timers and do the effects if they trigger, so the tick method will
+  return a bool of if there was an overflow on that timer or not.
 
 ```rust
   if envelope_timer.tick() {
@@ -333,7 +334,18 @@ appropriate effect timers and do the effects if they trigger.
   }
 ```
 
-Seem easy to use? I think so, I hope you think so. The methods look like this:
+Seem easy to use? I think so, I hope you also think so.
+
+So we have a struct like this:
+
+```rust
+pub struct EffectTimer {
+  pub position: f32,
+  pub cycle_per_tick: f32
+}
+```
+
+And some methods that look like this:
 
 ```rust
 impl EffectTimer {
@@ -360,7 +372,7 @@ impl EffectTimer {
 }
 ```
 
-does it work? We can write a test for that.
+does it work? We can write a test to hopefully see.
 
 ```rust
 #[test]
@@ -394,14 +406,14 @@ of **1,048,576**. That's _really_ high, but more importantly it divides evenly
 by 64, 128, and 256, so you can track the effect periods over an even number of
 samples.
 
-* We could double our output frequency (to 96k) and then we'd be at an even
-  multiple of 256. Then we can use just integers for everything and track time
-  in terms of 1/256th of a second units. Eg: a 7/128th of a second Sweep
-  interval can be tracked with a 1/256th second timer and then you wait for it
-  to roll over 14 times.
+* We could double our output frequency (to 96k) and then we'd also be at an even
+  multiple of 256. Then we can use just use integers for everything and track
+  time in terms of 1/256th of a second units (375 samples). Eg: a 7/128th of a
+  second Sweep interval can be tracked with a 1/256th second timer and then you
+  wait for it to roll over 14 times.
 * We could try to set up some fixed point math with enough fractional precision
-  so that we can always track small enough values and run whatever interval
-  effect timer we need. This is largely similar in spirit to the above option.
+  so that we can always track small enough values to run whatever interval
+  effect timer we need even with a sample rate of only 48k.
 * We could just accept some slop and not worry about it.
 
 For now we'll just accept the slop and not worry about it too much. As long as
@@ -409,5 +421,98 @@ we're aware of where we're getting it wrong it's not so bad, and we can always
 choose to improve it later if we need to.
 
 ### Wave Form Timer
+
+The wave form timer is the more complicated timer. We still tick forward by one
+sample at a time, but instead of getting a `bool` back saying if there was an
+overflow or not, we get back some information about which chunk values we should
+use to determine our output sample.
+
+What exactly does that information look like? That's a good question. I think
+we'll want our output format to be the starting chunk as well as a count of how
+many chunks after that we should also average in.
+
+```rust
+let (target_chunk, chunk_bounds_crossed) = wave_form_timer.tick();
+let sample_value = if chunk_bounds_crossed > 1 {
+  // average many chunks
+} else {
+  // check just one chunk, or possibly interpolate two if you really want
+};
+```
+
+Does that look okay? I think it looks okay. How do we make one of these things?
+
+```rust
+let chunk_timer = ChunkTimer::for_wave(wave.len(), wave_hz, sample_rate);
+```
+
+Seems easy enough? Yeah probably. Okay let's do the code for that.
+
+```rust
+pub struct ChunkTimer {
+  pub wave_position: f32,
+  pub chunks_per_sample: f32,
+  pub chunk_count: usize,
+}
+impl ChunkTimer {
+  pub fn for_wave(chunk_count: usize, frequency: u32, sample_rate: u32) -> Self {
+    let chunks_per_sample = chunk_count as f32 / (sample_rate as f32 / frequency as f32);
+    Self {
+      wave_position: 0.0,
+      chunks_per_sample,
+      chunk_count,
+    }
+  }
+
+  pub fn tick(&mut self) -> (usize, usize) {
+    let chunk_count_f = self.chunk_count as f32;
+    let base_index = self.wave_position as usize;
+    self.wave_position += self.chunks_per_sample;
+    let final_index = self.wave_position as usize;
+    if self.wave_position >= chunk_count_f {
+      if self.wave_position >= chunk_count_f * 2.0 {
+        self.wave_position %= chunk_count_f;
+      } else {
+        self.wave_position -= chunk_count_f;
+      }
+    }
+    let chunk_bounds_crossed = final_index - base_index;
+    (base_index, chunk_bounds_crossed)
+  }
+}
+```
+
+And a quick test as well:
+
+```rust
+#[test]
+pub fn chunk_timer_test() {
+  const SAMPLES_PER_SECOND: u32 = 48_000;
+  for &frequency in &[32, 261, 6000, 50_001] {
+    for &length in &[1, 8, 32, 33] {
+      let mut chunk_timer = ChunkTimer::for_wave(length, frequency, SAMPLES_PER_SECOND);
+      let (start_index, first_chunk_bounds_crossed) = chunk_timer.tick();
+      assert_eq!(start_index, 0);
+      for _ in 0..100 {
+        let (base_index, new_chunk_bounds_crossed) = chunk_timer.tick();
+        assert!(base_index < length);
+        assert!(
+          new_chunk_bounds_crossed == first_chunk_bounds_crossed
+            || new_chunk_bounds_crossed == first_chunk_bounds_crossed + 1
+        );
+      }
+    }
+  }
+}
+```
+
+Alright, so we can keep track of time as it passes. I guess we need to implement
+at least one voice and see if these timers let us do that well.
+
+Which voice is first? Well, _The Ultimate Game Boy Talk_ describes the Wave
+voice first and calls it the simplest to understand. That's probably because it
+has the least special features.
+
+## Wave Voice
 
 TODO
