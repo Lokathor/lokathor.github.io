@@ -277,7 +277,7 @@ Here's our base terms:
 Remember that when you divide one fraction by another fraction it's the same as
 multiplying the first fraction by the _inverse_ of the second fraction:
 
-* `(a/b)/(c/d) == (a/b)*(c/d)`
+* `(a/b) / (c/d) == (a/b) * (d/c)`
 
 So, if we combine some of those figures, these are how the dimensions change.
 The steps are written out to try and help you follow what's going on, because
