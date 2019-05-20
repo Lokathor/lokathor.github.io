@@ -17,11 +17,11 @@ hardware at the time could really do in just a few ways.
 
 We're gonna be making some sounds that sound like the sounds the Game Boy made.
 
-We'll be making a system that has an authentic sounding output, but is easy to
-control in the style of a modern library. It obviously will be brazenly
-wasteful, using entire _bytes_ to store a number when just 2 bits could have
-done the job, things like that. Yet, despite this, I think it will turn out
-great.
+We'll be making a system that has a "close to authentic" output, but without
+following the exact Game Boy limits, and one that is easy to control in the
+style of a modern library. It obviously will be brazenly wasteful, using entire
+_bytes_ to store a number when just 2 bits could have done the job, things like
+that. Yet, despite this, I think it will turn out great.
 
 * **Just to be clear from the start:** this will _not_ end with a system ready
   made for use as part of of a Game Boy emulator. We won't bother to follow the
@@ -31,10 +31,11 @@ great.
   be stricter about how you implement things in your emulator's version.
 
 I will be writing the code samples in Rust, but the theory is the same for any
-programming language, and I will attempt to keep my use of any Rust magic to a
-relative minimum so that programmers from other languages can also follow along.
-I will, for example, leave off the `derive` attributes and such, because they're
-usually not critical.
+programming language, so hopefully you can read this even if you don't know
+Rust. I will attempt to keep my use of any Rust magic to a relative minimum. I
+will, for example, leave off the `derive` attributes and such from the sample
+struct definitions, because they're usually not critical. If you want to see the
+full code with every gorey detail I'll give a link at the end.
 
 ## Previous Work
 
@@ -510,8 +511,8 @@ Alright, so we can keep track of time as it passes. I guess we need to implement
 at least one voice and see if these timers let us do that well.
 
 Which voice is first? Well, _The Ultimate Game Boy Talk_ describes the Wave
-voice first and calls it the simplest to understand. That's probably because it
-has the least special features.
+voice first and calls it the simplest to understand. Having done this once
+before, I agree with that assessment, and we'll go with that first.
 
 ## Wave Voice
 
