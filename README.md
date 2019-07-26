@@ -5,6 +5,8 @@ For those times when you are using crates.
 
 (alphabetical order)
 
+* [getrandom](https://crates.io/crates/getrandom)
+* [gfx-hal](https://crates.io/crates/gfx-hal)
 * [log](https://crates.io/crates/log) + [simple_logger](https://crates.io/crates/simple_logger)
 * [lokacore](https://crates.io/crates/lokacore)
 * [phantom-fields](https://crates.io/crates/phantom-fields)
