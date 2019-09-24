@@ -5,7 +5,7 @@
 * [randomize](https://crates.io/crates/randomize)
 * [voladdress](https://crates.io/crates/voladdress)
 
-# Lokathor's list of approved Good Crates To Use (not written by me)
+# Other Good Crates To Use (not written by me)
 
 For those times when you are using crates.
 
