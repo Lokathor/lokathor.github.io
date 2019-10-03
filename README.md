@@ -1,15 +1,17 @@
 
 # Lokathor's Stuff To Show Off
 
-* [bytemuck](https://crates.io/crates/bytemuck)
-* [randomize](https://crates.io/crates/randomize)
-* [voladdress](https://crates.io/crates/voladdress)
+* [bytemuck](https://docs.rs/bytemuck)
+* [fermium](https://docs.rs/fermium)
+* [randomize](https://docs.rs/randomize)
+* [voladdress](https://docs.rs/voladdress)
 
-# Other Good Crates To Use (not written by me)
+# Other Good Crates To Use (that aren't written by me)
 
-* [cfg-if](https://crates.io/crates/cfg-if)
-* [getrandom](https://crates.io/crates/getrandom)
-* [gfx-hal](https://crates.io/crates/gfx-hal)
-* [log](https://crates.io/crates/log) + [simple_logger](https://crates.io/crates/simple_logger)
-* [serde](https://crates.io/crates/serde) + [bincode](https://crates.io/crates/bincode)
-* [winapi](https://crates.io/crates/winapi)
+* [cfg-if](https://docs.rs/cfg-if)
+* [getrandom](https://docs.rs/getrandom)
+* [glow](https://docs.rs/glow)
+* [log](https://docs.rs/log) + [simple_logger](https://docs.rs/simple_logger)
+* [serde](https://docs.rs/serde) + [bincode](https://docs.rs/bincode)
+* [static_assertions](https://docs.rs/static_assertions)
+* [winapi](https://docs.rs/winapi)
