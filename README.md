@@ -1,17 +1,28 @@
 
-# Lokathor's Stuff To Show Off
+# Lokathor's Ecosystem Guide
 
-* [bytemuck](https://docs.rs/bytemuck)
-* [fermium](https://docs.rs/fermium)
-* [randomize](https://docs.rs/randomize)
-* [voladdress](https://docs.rs/voladdress)
+Kinda sorted by "how portable" is the code, or maybe "how much setup does the code require" might be a good way to put it.
 
-# Other Good Crates To Use (that aren't written by me)
+The first tier is "core only", and then each next tier is basically an extra thing you might need to handle in your setup.
 
-* [cfg-if](https://docs.rs/cfg-if)
-* [getrandom](https://docs.rs/getrandom)
-* [glow](https://docs.rs/glow)
-* [log](https://docs.rs/log) + [simple_logger](https://docs.rs/simple_logger)
-* [serde](https://docs.rs/serde) + [bincode](https://docs.rs/bincode)
-* [static_assertions](https://docs.rs/static_assertions)
-* [winapi](https://docs.rs/winapi)
+## Core Only
+
+### cfg-if
+
+The [cfg-if](https://docs.rs/cfg-if) crate is the ultimate answer to conditional compilation. It takes in a macro expression formatted to look like an `if-else` expression chain, and spits out whichever block of the expression matches the compile time configuration. If you know how to use `if-else` then you already know how to use this crate. Each conditional test is a `#[cfg()]` conditional, it's as easy as that. The crate is just a single macro, so it works anywhere.
+
+### static_assertions
+### bytemuck
+### voladdress
+
+## Core + Alloc
+
+## FFI / OS
+
+### winapi
+### fenestroj
+### getrandom
+
+## Rust Standard Library
+
+### wide
