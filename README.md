@@ -46,3 +46,7 @@ Yes.
 ### [wide](https://docs.rs/wide)
 
 Singular, Multi, what more could a person want.
+
+### [ultraviolet](https://docs.rs/ultraviolet)
+
+Purple never tasted so good.
