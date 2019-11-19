@@ -54,3 +54,10 @@ Purple never tasted so good.
 ### [glow](https://docs.rs/glow)
 
 Whatever the GL on.
+
+# 1.0 Crates
+
+* [gbafix](https://docs.rs/gbafix)
+* [randomize](https://docs.rs/randomize)
+* [rusty-xinput](https://docs.rs/rusty-xinput)
+* [sharecart1000](https://docs.rs/sharecart1000)
