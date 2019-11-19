@@ -7,7 +7,7 @@
 
 Great.
 
-### [bytemuck](https://docs.rs/bytemuck)
+### [bytemuck](https://docs.rs/bytemuck) (1.0!)
 
 Amazing and simple.
 
@@ -15,7 +15,7 @@ Amazing and simple.
 
 For all your MMIO needs.
 
-### [randomize](https://docs.rs/randomize)
+### [randomize](https://docs.rs/randomize) (3.0!)
 
 Chaos is a delight.
 
