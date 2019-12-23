@@ -1,11 +1,12 @@
 
 # Lokathor's Ecosystem Guide
 
-This isn't a guide to the whole ecosystem, this is just a guide to the stuff I've written.
+This isn't a guide to the _whole_ ecosystem, this is just a guide to the stuff I've written.
 
 ## Useful Libraries
 
 * [![docs.rs](https://docs.rs/bytemuck/badge.svg)](https://docs.rs/bytemuck/) bytemuck
+* [![docs.rs](https://docs.rs/chlorine/badge.svg)](https://docs.rs/chlorine/) chlorine
 * [![docs.rs](https://docs.rs/fermium/badge.svg)](https://docs.rs/fermium/) fermium
 * [![docs.rs](https://docs.rs/gles30/badge.svg)](https://docs.rs/gles30/) gles30
 * [![docs.rs](https://docs.rs/imagine/badge.svg)](https://docs.rs/imagine/) imagine
