@@ -1,9 +1,8 @@
 
 # Lokathor's Ecosystem Guide
 
-Here's a guide to the stuff that I, Lokathor, use, and that I think you might also find useful.
-
-It's very short, because programming was a mistake, second only to us crawing out of the oceans in the first place.
+Here's a guide to the stuff that I, Lokathor, personally use,
+and that I think is high enough quality that you might also find it useful.
 
 ## Useful Libraries
 
