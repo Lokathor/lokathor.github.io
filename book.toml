@@ -1,0 +1,10 @@
+[book]
+title = "Lokathor's Book Blog"
+authors = ["Lokathor"]
+description = "Using `mdbook` as a blog system."
+src = "book-src"
+language = "en"
+
+[build]
+build-dir = "target/book-output"
+create-missing = true

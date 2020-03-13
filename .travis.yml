@@ -1,0 +1,33 @@
+
+matrix:
+  include:
+    - os: linux
+      dist: bionic
+
+language: rust
+
+rust:
+  - stable
+
+cache:
+  cargo
+
+branches:
+  only:
+    - master
+
+script:
+  - mdbook build
+
+# This deploy will push the mdbook output to the `gh-pages` branch
+deploy:
+  provider: pages
+  local-dir: target/book-output
+  skip-cleanup: true
+  github-token: $GITHUB_TOKEN
+  keep-history: false
+  name: DocsBot
+  verbose: true
+  on:
+    branch: master
+    condition: $TRAVIS_OS_NAME = linux
