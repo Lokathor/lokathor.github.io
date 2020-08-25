@@ -11,3 +11,7 @@ This isn't my guide to the whole crates.io ecosystem, this is just a guide to th
 * [chlorine](https://docs.rs/chlorine)
 * [utf16_lit](https://docs.rs/utf16_lit)
 * [yacurses](https://docs.rs/yacurses)
+
+# Donations
+
+If you think my stuff is cool, you can [buy me a coffee](https://ko-fi.com/lokathor).
