@@ -17,6 +17,11 @@ This isn't my guide to the whole crates.io ecosystem, this is just a guide to th
 * [wide](https://docs.rs/wide) / [safe_arch](https://docs.rs/safe_arch)
 * [gl33](https://docs.rs/gl33) / [gl46](https://docs.rs/gl46) / [gles30](https://docs.rs/gles30)
 * [yacurses](https://docs.rs/yacurses)
+* [gba-addresses](https://docs.rs/gba-addresses)
+
+## Not a Library
+
+* [min-gba](https://github.com/rust-console/min-gba) is an minimal example project setup for building Rust for the GBA.
 
 # Donations
 
