@@ -17,7 +17,7 @@ This isn't my guide to the whole crates.io ecosystem, this is just a guide to th
 * [wide](https://docs.rs/wide) / [safe_arch](https://docs.rs/safe_arch)
 * [phosphorus](https://docs.rs/phosphorus) / [gl33](https://docs.rs/gl33) / [gl46](https://docs.rs/gl46) / [gles30](https://docs.rs/gles30)
 * [yacurses](https://docs.rs/yacurses)
-* [gba-addresses](https://docs.rs/gba-addresses)
+* [gba-addresses](https://docs.rs/gba-addresses) / [gba-types](https://docs.rs/gba-types)
 
 ## Not a Library
 
