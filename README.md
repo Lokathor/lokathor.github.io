@@ -11,6 +11,7 @@ This isn't my guide to the whole crates.io ecosystem, this is just a guide to th
 * [fermium](https://docs.rs/fermium)
 * [chlorine](https://docs.rs/chlorine)
 * [utf16_lit](https://docs.rs/utf16_lit)
+* [lawrencium](https://docs.rs/lawrencium)
 
 ## Pre-1.0
 
@@ -21,6 +22,7 @@ This isn't my guide to the whole crates.io ecosystem, this is just a guide to th
 
 ## Not a Library
 
+* [gbafix](https://github.com/rust-console/gbafix) is a program that patches GBA rom headers.
 * [min-gba](https://github.com/rust-console/min-gba) is an minimal example project setup for building Rust for the GBA.
 
 # Donations
