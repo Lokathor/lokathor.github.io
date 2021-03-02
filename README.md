@@ -8,6 +8,7 @@ Here's some stuff I've written in Rust that you could reasonably make use of in 
 * [fermium](https://docs.rs/fermium) - Raw SDL2 bindings
 * [yacurses](https://docs.rs/yacurses) - (Yet Another) safe Curses bindings crate
 * [voladdress](https://docs.rs/voladdress) - Volatile memory access types
+* [gl46](https://docs.rs/gl46) - OpenGL 4.6 bindings
 
 And here's some other stuff that's more niche, though still cool:
 
