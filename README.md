@@ -1,7 +1,7 @@
 
 # Lokathor's Ecosystem Guide
 
-Here's some stuff written in Rust that you could reasonably make use of:
+Here's some stuff I've written in Rust that you could reasonably make use of in your own projects:
 
 * [bytemuck](https://docs.rs/bytemuck) - safe transmute
 * [tinyvec](https://docs.rs/tinyvec) - safe "small vec" types
