@@ -5,4 +5,6 @@
    Got word that more people might want to use `fermium`,
    so I added a function that was missing that they wanted (more pending as they're reported).
    Added a small amount to `hektor`.
-2) ?
+2) Fixed the `gba` PR.
+   Did an amount of work on `vkvk` to add new raw functions and new rusty functions.
+3) ?
