@@ -7,4 +7,5 @@
    Added a small amount to `hektor`.
 2) Fixed the `gba` PR.
    Did an amount of work on `vkvk` to add new raw functions and new rusty functions.
-3) ?
+3) Released `gl-0.2.0`
+   Released `fermium-20014.3.0`
