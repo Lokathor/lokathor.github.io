@@ -9,3 +9,7 @@
    Did an amount of work on `vkvk` to add new raw functions and new rusty functions.
 3) Released `gl-0.2.0`
    Released `fermium-20014.3.0`
+4) Released `fermium-20014.4.0` and also `fermium-20014.4.1` (rip).
+   Put in a PR to rust-lang/rust for bool::not (wip)
+   Made a demo for `whist` because `@bitshiftmask` asked for someone to make such a thing.
+   Added more docs to `gl33` about how to use a "get proc address" to load GL.
