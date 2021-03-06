@@ -13,3 +13,6 @@
    Put in a PR to rust-lang/rust for bool::not (wip)
    Made a demo for `whist` because `@bitshiftmask` asked for someone to make such a thing.
    Added more docs to `gl33` about how to use a "get proc address" to load GL.
+5) Pushed around code in `randomize`, but I guess didn't ultimately change much.
+   Developed much more in `whist`, released 0.0.2.
+   Finished the multiplication in `hektor`.
