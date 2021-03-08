@@ -18,4 +18,5 @@
    Finished the multiplication in `hektor`.
 6) Fixed up `randomize` to have a much better "games" module, separate from the main PRNG things.
    Added correct layout tests in `hektor` and fixed the "as_slice" methods.
-7) ?
+7) Additional `hektor` work.
+8) 
