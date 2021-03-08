@@ -16,3 +16,6 @@
 5) Pushed around code in `randomize`, but I guess didn't ultimately change much.
    Developed much more in `whist`, released 0.0.2.
    Finished the multiplication in `hektor`.
+6) Fixed up `randomize` to have a much better "games" module, separate from the main PRNG things.
+   Added correct layout tests in `hektor` and fixed the "as_slice" methods.
+7) ?
