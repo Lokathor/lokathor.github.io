@@ -154,7 +154,14 @@ from the `&MaybeUninit<T>` and then LLVM discards the value in the path where
 the condition didn't hold, well then it's fine. Because LLVM actually *can* do
 things that Rust *can't* do (this is one of them).
 
-As to your follow-up question, "what about atomics?", same deal.
+As to your follow-up question, "what about atomics?", similar deal. LLVM has
+rules that are slightly different from most langauges that compile using LLVM.
+Inside of LLVM any data races return `undef` instead of causing UB. Actually
+using an `undef` value can cause problems, but just *having* the `undef` in hand
+and then throwing it out is fine. With atomics, any early read from
+dereferenceable would actually *always* be discarded because the "actual" reads
+you'd be doing as the programmer would be with atomic access instead of the
+"standard" access that dereferenceable uses. So again it "just works out".
 
 ## Access Elision
 
@@ -349,9 +356,10 @@ Perfect!
 > This means the compiler may not use a volatile operation to prove a
 > non-volatile access to that address has defined behavior.
 
-Ooh, hmm, interesting. We'd have to read more about this if we cared deeply
-about this point, but it seems that LLVM does track in some way which addresses
-are normally accessable memory and which addresses are "not normal memory".
+This would probably be worth a post of its own, but basically LLVM tracks what
+addresses are part of normal memory and what ones aren't during compilation. If
+you use a volatile access it doesn't make that address count as part of the
+"normal" memory.
 
 > The allowed side-effects for volatile accesses are limited.
 
@@ -418,3 +426,17 @@ thing it was allowed to potentially do.
 
 So it's not the worst thing ever, but it is a fundamental incorrectness that
 lurks in most embedded Rust code.
+
+## Is There A Fix In Sight?
+
+People are aware of the issue, there are several issues about it around github.
+
+However, at this exact moment (2021-04-02-23:46 Mountain Time), there's not any
+fix currently in the timeline.
+
+Since we're in the lead up to the 2021 edition, it's unlikely to be fixed soon,
+but it will be fixed eventually.
+
+Like I said earlier, this has (as far as I know) never been demonstrated to
+actually cause any problems in any real programs. It just *could* cause
+problems, so it's on the list of things to fix eventually.
