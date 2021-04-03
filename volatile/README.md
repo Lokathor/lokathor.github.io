@@ -32,7 +32,7 @@ markdown file in a github pages instead.
 ## Step-by-step
 
 To make sure everyone is on the same page, we have to cover a few different
-things one at a time.
+things.
 
 Everyone in the twitter thread that sparked this essay thing seemed to have
 slightly different background knowledge levels, so let's go over the situation
