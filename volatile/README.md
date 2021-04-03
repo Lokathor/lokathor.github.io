@@ -141,7 +141,8 @@ effects than you were supposed to have.
   sort of way. It's just *wrong* behavior that's borderline impossible to debug.
 
 This is why `&VolatileCell<T>` based abstraction crates are all incorrect. They
-have a reference to the MMIO location, and so LLVM is allowed to potentially.
+have a reference to the MMIO location, and so LLVM is allowed to potentially
+ruin your day.
 
 ### Dereferenceable Gaiden: The Uninit Story
 
