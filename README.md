@@ -1,4 +1,6 @@
 
+[The Volatile Post](https://lokathor.github.io/volatile/)
+
 # Lokathor's Ecosystem Guide
 
 Here's some stuff I've written in Rust that you could reasonably make use of in your own projects:
