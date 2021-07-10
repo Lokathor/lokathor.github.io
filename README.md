@@ -1,5 +1,8 @@
 
-[The Volatile Post](https://lokathor.github.io/volatile/)
+# Blog Post Stuff
+
+* [The Volatile Post](https://lokathor.github.io/volatile/)
+* [PRNGs](https://lokathor.github.io/prngs/)
 
 # Lokathor's Ecosystem Guide
 
