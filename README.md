@@ -2,7 +2,7 @@
 # Blog Post Stuff
 
 * [The Volatile Post](https://lokathor.github.io/volatile/)
-* [PRNGs](https://lokathor.github.io/prngs/)
+* [Pseudorandom Number Generators](https://lokathor.github.io/prng/)
 
 # Lokathor's Ecosystem Guide
 
