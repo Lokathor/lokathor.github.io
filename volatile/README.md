@@ -56,7 +56,7 @@ What does the attribute do? Let's first look at the full quote:
 > dereferenceable can be loaded from speculatively without a risk of trapping.
 > The number of bytes known to be dereferenceable must be provided in
 > parentheses. It is legal for the number of bytes to be less than the size of
-> the pointee type. The nonnull attribute does not imply dereferenceability
+> the pointe type. The nonnull attribute does not imply dereferenceability
 > (consider a pointer to one element past the end of an array), however
 > dereferenceable(<n>) does imply nonnull in addrspace(0) (which is the default
 > address space), except if the null_pointer_is_valid function attribute is
