@@ -594,7 +594,8 @@ Now every time we would output a value from the generator we're going to `xor` t
 We'll select which extension array slot at random by using bits from our `position`.
 If we want the slot usage to be very predictable we can use the lowest bits, otherwise we can use the highest bits.
 This is why `K` should be a power of 2.
-When that's the case, it's easy to use the highest or lowest bits from `position` to make an unbiased index into the extension array.
+When `K` is a power of two, it's easy to use the highest or lowest bits from `position` to make an unbiased index into the extension array.
+If `K` isn't a power of two we can use `%` to get some of the lowest bits and have *something* that's a valid index, but the index selection would become biased.
 
 So far it's kinda like we've just mixed `K` different output sequences together.
 One per extension array slot, right?
@@ -612,15 +613,15 @@ Since we already talked about the digit generator, we can use a system like that
 This time we can just use "+1" as the "per digit" advancement system for simplicity.
 
 ```rust
-impl<const MUL: u64, const ADD: u64, const K: usize> DigitCounter_GenericLcg64_32<MUL, ADD, K> {
+impl<const MUL: u64, const ADD: u64, const K: usize> ExtensionArray_GenericLcg64_32<MUL, ADD, K> {
     pub fn next_u32(&mut self) -> u32 {
         // mask with an extension array slot
-        let out = (self.position >> 32) as u32 ^ self.ext[self.position % K];
+        let out = (self.position >> 32) as u32 ^ self.ext[self.position as usize % K];
         // if our position is 0 we advance the array
         if self.position == 0 {
             let mut last_carried = false;
             self.ext.iter_mut().for_each(|x_mut| {
-                let (new, carried) = x_mut.overflowing_add(1 + (last_carried as u64));
+                let (new, carried) = x_mut.overflowing_add(1 + (last_carried as u32));
                 *x_mut = new;
                 last_carried = carried;
             });
@@ -714,7 +715,7 @@ So instead of doing a left shift and truncate, we'd do one of these.
 
 ## Building A Pcg
 
-Actually putting one of these PCG things together is 99% the same as how an LCG works.
+Actually putting one of these PCG things together is about 98% the same as how an LCG works.
 
 The only difference is that instead of doing `(self.position >> 32) as u32` to get our output,
 we call whichever permutation function we want to use.
@@ -750,7 +751,7 @@ One note on the naming:
 
 <!--
 
-TODO
+TODO double check that all the code works in the playground
 
 ## Testing with BigCrush
 
