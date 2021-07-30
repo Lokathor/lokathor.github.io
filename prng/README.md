@@ -2,11 +2,11 @@
 
 Let's talk about [Pseudorandom Number Generators](https://en.wikipedia.org/wiki/Pseudorandom_number_generator), which are called PRNGs for short.
 
-In general, they're a deterministic way to take some **state** and perform a **step** so that you'll have both a new state and also some random-seeming output value.
+In general, a PRNG is a deterministic way to take some **state** and perform a **step** so that you'll have both a new state and also some random-seeming output value.
 
-There's lots of possible PRNGs. There's even *families* of PRNGs, where they all use the same basic math and just a few constants are different (different multipliers, different offsets, different state size, etc).
+There's lots of possible PRNGs. There's even *families* of PRNGs, where they all use the same basic math and just a few constants are different between each particular generator (different multipliers, different offsets, different state size, etc).
 
-Today we're going to be looking at PRNGs from specifically the perspective of implementing them in Rust code. I'm really not the best at math, but I am kinda accidentally good at programming, so I usually try to understand math *in terms of* what it means for some sort of programming thing. Then the math makes more sense to me.
+Today we're not going to invent a totally new PRNG, we're going to implement an existing one.
 
 Also, in this article we'll need to talk about "X to the power of Y" type values. In math, if you can't write actual superscript text, sometimes you'd write `X^Y`, but in Rust the `^` character means `bitwise_xor`. Since Rust doesn't naturally have any operator for the power function we'll go ahead and steal `**` from Python. So if we want "X to the power of Y" we'll write `X**Y`.
 
@@ -16,22 +16,22 @@ There's several categories that we might care about when considering a PRNG.
 
 First of all we can consider the **size** of the generator's state. This is very easy to quantify: how many bytes do we need for our struct? In general, we'd like all our structs to be as small as possible, and this is no different.
 
-Also as usual for any programming thing, we also want the **speed** of the step function to be as fast as possible. This is also pretty easy to quantify, we can set up benchmarks and check the speed of different step functions for different generators. If we care about bulk randomness generation we might measure the output in terms of GB/seconds, which makes for a better comparison between generators that have different amounts of output per step.
+We also want the **speed** of the step function to be as fast as possible. This is also pretty easy to quantify, we can set up benchmarks and check the speed of different step functions for different generators. If we care about bulk randomness generation we might measure the output in terms of GB/second, which makes for a better comparison between generators that have different amounts of output per step.
 
-The **period** of the generator is how many times you can step the generator before the output sequence loops around. Since they're deterministic, eventually *all* PRNGs will loop around. The period of a generator is *at most* equal to the number of possible bit states within the generator. However, not all generator state is always used with maximum efficiency towards having a long period, so sometimes the period is less than the number of possible bit states. Even if you don't plan to *actually* loop the generator, you usually want different runs of the program (or different threads within a single program) to not re-use parts of the sequence that you've gone over before, so a bigger period is always nicer to have. On modern machines, `2**64` should be the *minimum* acceptable generator period.
+The **period** of the generator is how many times you can step the generator before the output sequence loops around. Since they're deterministic, eventually *all* PRNGs will loop around. The period of a generator is *at most* equal to the number of possible bit states within the generator. If there's only 8 bits of state, that's only 256 possible states, so you can't have more than a period of 256. However, not all generator state is always used with maximum efficiency towards having a long period, so sometimes the period is less than the number of possible bit states. Even if you don't plan to *actually* loop the generator, you usually want different runs of the program (or different threads within a single program) to not re-use parts of the sequence that you've gone over before, so a bigger period is always nicer to have. On modern machines, `2**64` should be the *minimum* acceptable generator period.
 
 When we talk about the **quality** of the output generator we mean how random-seeming each output is. Is the output biased? Can the output be predicted based on the previous outputs? Stuff like that. Checking these things involves running the generator to get output and then doing statistical tests on that output. You're *not* expected to know how to do that yourself. Instead, there's test suites that are available that will run your generator and then do the statistics on the output and print out some results. [TestU01][github-TestU01] is a C library that has the `SmallCrush`, `Crush`, and `BigCrush` test batteries. [PractRand][sourceforge-PractRand] can be used as a library or as a CLI tool.
 
 [github-TestU01]: https://github.com/umontreal-simul/TestU01-2009/
 [sourceforge-PractRand]: http://pracrand.sourceforge.net/
 
-A generator has **uniform** output if every possible output value appears an equal number of times in the full output sequence. It could be exactly once for each possible output, or it could be more than once, as long as all outputs appear an equal number of times. This might seem very simple, but some generators don't do this. If a generator is known to be uniform and you go through more than about half of the period, the apparent quality of the output begins to slowly drop, until the final output value becomes perfectly guessable. The logic goes like this: if all outputs showed up X many times, except one particular output which showed up X-1 times, the final output has to be the one that was X-1 times. If the period of your PRNG is large enough then this isn't really an actual problem in practice, but I think it's worth mentioning.
+A generator has **uniform** output if every possible output value appears an equal number of times in the full output sequence. It could be exactly once for each possible output, or it could be more than once, as long as all outputs appear an equal number of times. This might seem very simple, but some generators don't do this. If a generator is known to be uniform and you go through more than about half of the period, the apparent quality of the output begins to slowly drop, until the final output value becomes perfectly guessable. Since all outputs showed up X many times, except one particular output which showed up X-1 times, the final output has to be the one that was X-1 times. In practice this isn't a problem for realistic sized generators, because no one would precisely log all of the outputs of your generator anyway.
 
-A concept that's similar to uniformity, but not quite the same, is **k-dimensional equidistribution**. This means "how many times *in a row* can you call the generator before the next output can't be any possible value in the output range?". If you're using multiple generator calls aggregated together then you probably really care about this one. Say you're generating 2D points, with one call for X and one for Y. You probably want to know if the point `(1,1)` can't ever *actually* occur because the output sequence doesn't ever have an output of `1` twice in a row. Maybe that chance of seeing a `(1,1)` is *very small*, but it should be *possible* right?
+A concept that's similar to uniformity, but not quite the same, is **k-dimensional equidistribution**. This means "how many times *in a row* can you get a generator output before the next output can't be any possible value in the output range?". If you're using multiple generator calls aggregated together then you probably really care about this one. Say you're generating 2D points, with one call for X and one for Y. You probably want to know if the point `(1,1)` can't ever *actually* occur because the output sequence doesn't ever have an output of `1` twice in a row. Maybe that chance of seeing a `(1,1)` is *very small*, but it should be *possible* right?
 
 ## My Kingdom For A Hardware Multiplier
 
-The types of PRNGs we'll be focusing on today assume that your device is *at least* advanced enough to have efficient hardware integer multiplication. This might seem like a low bar, but lots of fun retro devices don't have that, or they do but it's costly. If you're programming for something where multiplication is a heavy cost and you want something cheaper than that check out the [XorShift][wp-xorshift] family of generators instead.
+The types of PRNGs we'll be focusing on today assume that your device is *at least* advanced enough to have efficient hardware integer multiplication. This might seem like a low bar, but lots of fun retro devices don't have that, or they do but it's costly. If you're programming for something where multiplication is a heavy cost and you want something cheaper than that maybe check out the [XorShift][wp-xorshift] family of generators instead.
 
 [wp-xorshift]: https://en.wikipedia.org/wiki/Xorshift
 
@@ -55,7 +55,7 @@ One of the easiest types of generator to understand and implement is the [Linear
 
 [wp-lcg]: https://en.wikipedia.org/wiki/Linear_congruential_generator
 
-The LCG family of generators was developed in 1958 by W. E. Thomson and A. Rotenberg, based on the slightly earlier Lehmer generator which had been developed by D. H. Lehmer in 1951. While there *are* some problems with this type of generator, they're well understood problems that we can compensate for.
+The LCG family of generators was developed in 1958 by W. E. Thomson and A. Rotenberg, based on the slightly earlier Lehmer Generator which had been developed by D. H. Lehmer in 1951. While there *are* some problems with this type of generator, they're well understood problems that we can compensate for.
 
 ## LCG Basics
 
@@ -67,7 +67,9 @@ The core formula of the LCG family is very simple. If you look at the wikipedia 
 x_next = (a * x_current + c) `mod` m
 ```
 
-The `mod` thing is something you might not be familiar with called [Modular Arithmetic][wp-mod]. Essentially the value of `a * x_current + c` is "wrapped" to be within 0 to `m`. Not only that, but there's some rules for all the parameters involved if we want it to work right:
+The `mod` thing is something you might not be familiar with called [Modular Arithmetic][wp-mod]. Essentially the value of `a * x_current + c` is "wrapped" to be within 0 to `m`.
+
+There's some rules for all the parameters involved if we want it to work right:
 
 [wp-mod]: https://en.wikipedia.org/wiki/Modular_arithmetic
 
@@ -104,14 +106,14 @@ That's a *lot* of "`mod` m". Are we closer to something useful? All of our terms
 If we use 32-bit integers then `m=2**32`, if we use 64-bit integers then `m=2**64`, and so on. Which means that we can pick an unsigned integer type and cancel out all the "`mod` m" parts, which simplifies our formula back down to:
 
 ```
-// pseudocode
+// still kinda pseudocode
 
 x_next = a.wrapping_mul(x_current).wrapping_add(c)
 ```
 
 Convenient! I told you an LCG would be pretty easy to implement after all.
 
-Okay, let's get some actual rust code going. We'll use `u64` values for everything, since that's the biggest we can efficiently go on a 64-bit machine. We'll also use const generics for the multiply and add value, since those values aren't supposed to change ever. We're gonna give them the name `MUL` and `ADD` though so it's more clear to others what they're doing. And the value that changes from step to step can be, uh, the `position`? When you step around you're changing your position, that makes sense. We don't want to just call it "state" since in a little bit we'll have some other state fields too.
+Okay, let's get some actual rust code going. We'll use `u64` values for everything, since that's the biggest we can efficiently go on a 64-bit machine. We'll also use const generics for the multiply and add value, since those values aren't supposed to change while the generator is running. We're gonna give them the name `MUL` and `ADD` though, so it's more clear to others what they're doing. And the value that changes from step to step can be, uh, the `position`? When you step around you're changing your position, that makes sense. We don't want to just call it "state" since in a little bit we'll have some other state fields too.
 
 ```rust
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -132,7 +134,7 @@ Is our generator any good? Who knows! We can't even turn it on right now because
 
 ## Selecting Our LCG Parameters
 
-Let's go back to that Wikipedia page about how LCGs work. It says if we want the maximum period possible for our generator, and given that we've already selected `m=2**64`, then we need to have `ADD != 0` and we have to make sure that we satisfy the following rules (the "Hull–Dobell Theorem"):
+Let's go back to that Wikipedia page about how LCGs work. It says if we want the maximum period possible for our generator, and given that we've already selected `m=2**64`, then we need to have `ADD != 0`, and we have to make sure that we satisfy the following rules (the "Hull–Dobell Theorem"):
 
 * `m` and `ADD` are relatively prime (aka: `gcd(2**64, ADD) == 1`), which means `ADD` must be odd.
 * `MUL-1` is divisible by all prime factors of `m`.
@@ -157,28 +159,30 @@ Okay so let's check out those references numbered 2 and 10:
 * 2: Steele, Guy; Vigna, Sebastiano (15 January 2020). "**Computationally easy, spectrally good multipliers for congruential pseudorandom number generators**". [arXiv:2001.05304](https://arxiv.org/abs/2001.05304) \[cs.DS\]. "At this point it is unlikely that the now-traditional names will be corrected." Mathematics of Computation (to appear). Associated data at <https://github.com/vigna/CPRNG>.
 * 10: L'Ecuyer, Pierre (1999). "**Tables of Linear Congruential Generators of Different Sizes and Good Lattice Structure**". Mathematics of Computation. 68 (225): 249–260. [CiteSeerX 10.1.1.34.1024](https://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.34.1024). [doi:10.1090/S0025-5718-99-00996-5](https://www.ams.org/journals/mcom/1999-68-225/S0025-5718-99-00996-5/home.html). Be sure to read the [Errata](https://www.iro.umontreal.ca/~lecuyer/myftp/papers/latrules99Errata.pdf) as well.
 
-Ah, hmm, well... okay we check the most recent paper first. There's new numbers invented all the time, so we want recent numbers of course. Here's the [direct link to the PDF](https://arxiv.org/pdf/2001.05304.pdf) if you don't want to bother looking thought the arXiv website and finding the link yourself.
+Ah, hmm, well... okay we check the most recent paper first. We want those latest and greatest numbers. Here's the [direct link to the PDF](https://arxiv.org/pdf/2001.05304.pdf) if you don't want to bother looking thought the arXiv website and finding the link yourself.
 
 ### Steele / Vigna 2020
 
-When reading a paper for the first time, always take a moment to double check the Abstract and the Introduction to make sure that what you think it's talking about and what it thinks its talking about are the same thing.
+When reading a paper for the first time, always take a moment to double check the Abstract and the Introduction to make sure that what *you* think it's talking about and what *it* thinks its talking about are the same thing.
 
 > In this paper, we provide lists of multipliers for both MCGs and LCGs, continuing the line of work by L'Ecuyer in his classic paper.
 
-Paydirt! Oh hey there's that github link... maybe it lists some numbers? Readme for the repo says their database of numbers is 14GB compressed, and 36GB decompressed. Sounds like the wrong avenue for us.
+Paydirt! Oh hey there's that github link again... maybe it lists some numbers? The ReadMe for the repo says their database of numbers is 14GB compressed, and 36GB decompressed. Sounds like the wrong avenue for us.
 
 * *Chapter 2* talks about the Spectral Figures of Merit. Lattice, Hyperplanes, Spectral Test, Hermite Constant. I'm very lost among all these terms, but let's keep going. Surely we'll be able to tell a list of numbers when we see it.
-* *Chapter 3* is about "Computationally Easy Multipliers". This is the interesting idea. If we're multiplying our position by a constant, then a smaller constant might take fewer instructions to get loaded into a register.
+* *Chapter 3* is about "Computationally Easy Multipliers". This is the interesting idea. If we're multiplying our position by a constant, then a smaller constant might take fewer instructions to get loaded into a register. This is more important for ARM than x86, but still.
 * *Chapter 4*: Bounds on Spectral Scores?
 * *Chapter 5*: Beyond Spectral Scores? I hope someone understands this stuff, I don't.
-* *Chapter 6* "Potency" gives us another way to determine if a multiplier is good or not. It also says that depending on our multiplier, the add value we pick will put our output sequence into one of several equivalence classes "up to an additive constant". I don't entirely know what that means, but I think it means once we pick a `MUL` value the `ADD` value is a lot less important, so we can just use 1 probably.
+* *Chapter 6* "Potency" gives us another way to determine if a multiplier is good or not. It also says that depending on our multiplier, the add value we pick will put our output sequence into one of several equivalence classes "up to an additive constant". I don't entirely know what that means, but I think it means once we pick a `MUL` value the `ADD` value is a lot less important, so we can just use 1 or someting probably.
 * *Chapter 7* is about MCGs, so that doesn't apply to us.
 
-Ah, finally, *Chapter 8*: Tables. There's a wonderfully long explanation here of how all the different multipliers are ranked with spectral scores and harmonic scores and all sorts of things. The short version seems to be that, if we don't really know what we're doing:
+Ah, finally, *Chapter 8*: Tables.
+
+There's a wonderfully long explanation here of how all the different multipliers are ranked with spectral scores and harmonic scores and all sorts of things. The short version seems to be that, if we don't really know what we're doing:
 
 * We can find the pages for the `m` value we're using.
-* Make sure we're using the page that says `M+` at the top of the 3rd column (not `M*`, that's for MCG and we're doing LCG).
-* Then pick a multiplier bit width, which can be less than your full LCG's bit width. As they mentioned in Chapter 3 of the paper, there is sometimes an advantage to picking a smaller bit width multiplier.
+* Make sure we're using the page that says `M+` at the top of the 3rd column (not `M*`, that's for MCG, but we're doing LCG).
+* Then pick a multiplier bit width, which can be less than your full LCG's bit width. As they mentioned in Chapter 3 of the paper, there is sometimes a code advantage to picking a smaller bit width multiplier.
 * Finally, if you only want one number, pick the 2nd value in each grouping of four numbers for that bit width.
 
 So for an LCG with `u64`, we look in the chart and find `0xF691B575`. There's other values in the list we could also use, but we'll use that one for now. We finally have a `MUL` value!
@@ -191,12 +195,13 @@ Instead, we'll take a hint from how the PCG does it and use `(ADD<<1)|1`.
 This throws out the highest bit of user input instead of the lowest, which they're probably less likely to notice.
 We'll look more into the PCG stuff later on, this isn't the last trick we're gonna borrow from them.
 
+Let's just update that step function...
+
 ```rust
-impl<const MUL: u64, const ADD: u64> GenericLcg64_32<MUL, ADD> {
-    pub fn next_u32(&mut self) -> u32 {
-        let out = (self.position >> 32) as u32;
+impl<const MUL: u64, const ADD: u64> GenericLcg64<MUL, ADD> {
+    pub fn next_u64(&mut self) -> u64 {
         self.position = self.position.wrapping_mul(MUL).wrapping_add((ADD<<1)|1);
-        out
+        self.position
     }
 }
 ```
@@ -211,25 +216,17 @@ pub type SimpleLcg64 = GenericLcg64<0xF691B575, 0>;
 
 Okay, so we've got a generator, but it's *not very good* right now.
 
-The problem that we've got is that every bit in the generator's state is on a `2**bit` cycle, counting from 1 as the lowest bit. This means that the highest bit is on a `2**64` cycle, which is plenty large, but the lowest bit is on a `2**1` cycle. It's just constantly flipping between 0 and 1.
+The problem that we've got is that every bit in an LCG's state is on a `2**bit` cycle, counting from 1 as the lowest bit. This means that our highest bit is on a `2**64` cycle, which is plenty large, but the lowest bit is on a `2**1` cycle. It's just constantly flipping between 0 and 1.
 
-Alright, who cares? Well, the output of the generator at each step is the generator's entire state. This means that the predictable bits in the state become predictable bits in our output. Those top bits are fine, we just have an exponential fall off in quality as we go down the line of bits.
+Since the generator's entire state is output at each step, this means that the predictable bits in the state become predictable bits in our output. Those top bits are fine, we just have an exponential fall off in quality as we go down the line of bits.
 
-But, you know... in practice... well we don't need more than say 32 bits from a single step of the generator. Right? That's "big enough" nearly all the time. Let's just adjust the generator to only return `u32` values, and we can shift the upper half of the bits down and return those. Then we'd only be returning the good bits.
+Well, maybe we don't need more than say 32 bits from a single step of the generator. Right? That's "big enough" nearly all the time. Let's just adjust the generator to only return `u32` values, and we can shift the upper half of the bits down and return those. Then we'd only be returning the better bits.
 
 ```rust
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-#[repr(transparent)]
-pub struct GenericLcg64_32<const MUL: u64, const ADD: u64> {
-    position: u64,
-}
-
-pub type SimpleLcg64_32 = GenericLcg64_32<0xF691B575, 1>;
-
 impl<const MUL: u64, const ADD: u64> GenericLcg64_32<MUL, ADD> {
     pub fn next_u32(&mut self) -> u32 {
         let out = (self.position >> 32) as u32;
-        self.position = self.position.wrapping_mul(MUL).wrapping_add(ADD);
+        self.position = self.position.wrapping_mul(MUL).wrapping_add((ADD<<1)|1);
         out
     }
 }
@@ -239,11 +236,14 @@ Note that our output is formed from the position value *before* it changes, not 
 
 [wp-ilp]: https://en.wikipedia.org/wiki/Instruction-level_parallelism
 
-Also note that our generator has a new name! Before our generator was an "LCG64" type, because of a 64-bit position. Now that we're just keeping the best 32 bits it's known as an "LCG64/32". Of course there's plenty of possible multipliers and additives, so there isn't just exactly one LCG64/32, it's a whole family of potential generators.
+Now our generator has a new name! Before our generator was an "LCG64" type, because of a 64-bit position. Now that we're just keeping the best 32 bits for the ourput it's known as an "LCG64/32". Of course there's plenty of possible multipliers and additives, so there isn't just exactly one LCG64/32. Like I said at the start, it's a whole family of potential generators.
 
 ## Testing With `SmallCrush`
 
-Our generator isn't the best and can't pass any of the intense test suites, but at this point it should be able to at least pass the `SmallCrush` test suite from `TestU01`.
+Our generator isn't the best.
+An LCG64/32 just fundamentally can't pass any of the more intense randomness test suites.
+However, our generator *should* be able to at least pass the `SmallCrush` test suite from `TestU01`.
+Let's check our work so far.
 
 Thankfully, there's already a blog post on [how to test with TestU01][how-to-test-with-TestU01], so we'll mostly go by that. One minor problem: TestU01 is a C library. I don't want to bother with making it callable from Rust and all that, so for our quick test we'll just adapt the sample C program in the blog post into one that runs our LCG64/32. I'm not really a C programmer, but I know enough to do this little bit.
 
@@ -276,7 +276,9 @@ Okay, now we build the program from within our `/TestU01` directory that we have
 gcc -std=c99 -Wall -O3 -o lcg64 lcg64.c -Iinclude -Llib -ltestu01 -lprobdist -lmylib -lm
 ```
 
-And finally we run the thing. A whole ton of stuff spits out, and then at the end we see
+And finally we run the thing.
+
+A whole ton of stuff spits out, and then at the end we see
 
 ```
 ========= Summary results of SmallCrush =========
@@ -291,15 +293,14 @@ And finally we run the thing. A whole ton of stuff spits out, and then at the en
 
 Awesome!
 
-An LCG64/32 can't pass the stronger test batteries in TestU01. It's just fundamentally not a good enough generator, and there's not enough internal state to hide the problems. If we had an LCG128/32 that could pass (because of the additional state), but it would also be notably slower (128-bit ops must be emulated on 64-bit machines).
-
-For now, passing `SmallCrush` is good enough, and we'll switch over to talking about some fun additional things we can let our LCG do.
+Since an LCG64/32 can't pass the stronger test batteries in TestU01 we'll skip those for now.
+Passing `SmallCrush` is a good enough self check at this point.
+We'll switch over to talking about some fun additional things we can let our LCG do.
 
 ## Jumping The Generator Position
 
 Here's the first fun special technique that we can do with our LCG.
-If we want to send the generator forward by `delta` steps, without actually calling the generator's step function, we can!
-I don't mean we're gonna just do `delta` multiplies all in a single method, I mean we'll go `delta` steps in less than `delta` time.
+If we want to send the generator forward by `delta` steps, without actually calling the generator's step function `delta` times, we can!
 It's described in a paper called "**Random Number Generation with Arbitrary Stride**".
 If we look up that paper name we can get ourselves to the [OSTI page for the paper][osti-lcg-jump], which... I guess we click [find in google scholar][google-scholar-brown-94]?
 Right and... okay here's a [direct PDF Link](https://mcnp.lanl.gov/pdf_files/anl-rn-arb-stride.pdf), finally.
@@ -341,8 +342,7 @@ C = c * (g**k - 1)/(g-1)) `mod` 2**m
   = c * (1 + g + g**2 + ... + g**(k-1)) `mod` 2**m
 ```
 
-What?
-How does this help?
+Does this help?
 Well the paper proposes that we rewrite things like so:
 
 ```
@@ -389,7 +389,7 @@ Algorithm C:
   return C
 ```
 
-I'm sure you're wondering, "what's up with that `i <- (k + 2**m) `mod` 2**m`? isn't that a no-op?"
+I'm sure you're wondering, "what's up with that `i <- (k + 2**m) `mod` 2**m`? Isn't that a no-op?"
 The answer is that it's sorta trying to say that this works if you want to "go negative steps".
 That is, if you want to go to a previous state of the generator.
 Makes sense, since if you go far enough forward the generator output loops around eventually.
