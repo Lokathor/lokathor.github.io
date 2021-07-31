@@ -452,9 +452,9 @@ fn test_lcg_u64_jump() {
 
 ## Multiple Streams
 
-When you change the additive value it changes the ordering of all the outputs
+When you change the additive value it changes the ordering of all the outputs.
 If we wanted to have a little more possible variety we could have the `ADD` parameter be a field in the struct.
-That way the user could select which stream of numbers they were going through at runtime instead of always using an add of 1.
+That way the user could select which stream of numbers they were going through at runtime instead of having a compile time selected `ADD`.
 
 ```rust
 pub struct MultiStream_GenericLcg64_32<const MUL: u64> {
@@ -471,8 +471,8 @@ then we don't have to repeat the shift and bitor every time we use it.
 It's a fairly obvious transformation to go from a const generic to having the value as a field in the struct.
 Still, you might want to consider it if you're looking for a little more runtime variety without too much additional code complexity.
 
-The downside of this generator augmentation is that since the `position` is changing, but our `stream` doesn't change, we've doubled our required *state* without increasing our generator's *period*.
-Then again, maybe you just want more possible initial states for your program and you know it won't run through the whole period anyway.
+The downside of this generator alteration is that since the `position` is changing, but our `stream` doesn't change, we've doubled our required *state* without increasing our generator's *period*.
+At least it's a very simple change, so people can understand it without a big explanation.
 
 ## Digit Counter Generator
 
@@ -491,38 +491,44 @@ Imagine we have a [counter clicker](https://www.alfaplanhold.com/v/vspfiles/phot
 It's got a button, you push the button and the 1s digit goes up. When that rolls over from 9 to 0 then it carries and the 10s digit goes up.
 The pattern repeats up through all the digits, just that the highest digit doesn't carry into anything else.
 Eventually you'll see every possible digit combination, if you click through the entire sequence.
-So we know that if we have `k` different digit slots, then the overall sequence is `k`-dimensionally equidistributed.
+So we know that if we have `k` different digit slots, then the overall sequence is `k`-dimensionally equidistributed when you read the counter and then use one digit at a time from whatever value you read.
 
-A problem is that when we look at each block of output from the clicker, most of the digits are the same.
-Most of the time only change one out of all the `k` different digits: `000`, `001`, `002`, etc.
+A problem is that when we look at each successive block of output from the clicker, most of the digits are the same.
+Most of the time only a single digit is changing: `000`, `001`, `002`, etc.
 That's not very *random seeming*, is it?
 What we'll do instead is advance *every* digit with *every* click, in addition the carry when a digit rolls over.
-So with "advance the 1s digit" we'd have `008`, `009`, `010` (carry), `011`.
-With "advance all digits" we'd have `008`, `119`, `230` (carry), `341`.
-You might think that each individual digit is still fairly predictable,
-but when we use *real* generators with this system the "advance a digit" step will become much more unpredictable, instead of just "+1".
 
-Now, one thing here is that if each generator is *actually* an identical sequence, then sometimes the overall collection of generators will end up closely in phase.
-Imagine if our clicker counter got to `111`.
-The next step would be `222`, and `333`, until eventually `999` became `110` and they broke out of lockstep.
-That'll make the output temporarily not so great.
-To prevent this from happening we'll use a separate add value for each digit.
-Occasionally all the digits will show the same value, but since the sequences are all differently ordered they'd quickly jump back out of the lockstep.
+* Advance the 1s digit: `008`, `009`, `010` (carry), `011`.
+* Advance all digits: `008`, `119`, `230` (carry), `341`.
 
-Exactly how you have a different add value per generator digit is up to you.
+In the case of our Digit Counter Generator, each "digit" will be an entire LCG, and "advancing" the digit will be stepping the LCG once.
 
-* If we want to have just one add value for the whole thing we can just add +2 to the add value as we go to each next generator.
-* Alternately we could have a completely distinct add value *per generator digit*, if we wanted to really bump up that possibility space.
+Chaining a bunch of identical LCGs together has a problem.
+Sometimes the overall collection of generators will end up closely in phase.
+Imagine when our clicker counter gets to `000`.
+The next steps are `111`, `222`, etc.
+Eventually the `999` rolls to `110`, but that's 9 blocks of output in a row when all the digits are the same value.
+Not very great.
+It should be possible for all outputs to be the same value, but we don't want all those moments right in a row.
+To prevent this we need each LCG to be a unique output ordering.
+This is where the "Multiple Streams" idea comes in.
+Each digit will be using its own stream.
+Some of the time you'll still see all the digits have identical output, but they won't have all those moments directly in a row.
 
-Also, this generator works best for *block* output.
+Exactly *how* we do multiple streams per digit can be done in at least two ways:
+
+* If we want to have just one const generic add value for the whole thing we can just add +2 to the add value as we go to each next generator.
+* Alternately we could have a completely distinct add value field *per generator digit*, if we wanted to really bump up that possibility space.
+
+As I've mentioned already, this particular generator works best for *block* output.
 If you're outputting just one value at a time you need to store which "digit" you advanced last.
-Storing an index of "which digit is next" takes up state space which aren't actually helping the generator in any category we care about.
+Storing an index of "which digit is next" takes up state space which isn't actually helping the generator in any of the criteria categories we care about.
 If we output an entire block of values at once we never store which digit is next, since every call touches every digit.
 
 Let's finally get to some code.
 For this generator we'll have a method that takes a reference to an array and fills it in with new values.
-That saves us a lot of accidental stack copying whenever `next_block` doesn't get inlined.
-Also for this exact example we'll go with the "one basic `add` value that we adjust automatically between the digits" style.
+That saves us from a lot of accidental stack copying if `next_block` doesn't get inlined.
+Also, for this exact example we'll go with the "one const generic `ADD` value that we adjust automatically between the digits" style.
 
 ```rust
 // note: can't derive Default, we'd have to write the impl ourselves.
@@ -561,12 +567,11 @@ impl<const MUL: u64, const ADD: u64, const DIGITS: usize>
 ```
 
 In addition to having the `k`-dimensional equidistribution that we were after, this generator will have a *very* large period.
-If each internal "digit" is a `b`-bit LCG (period of `2**b`), our combined `k`-digit counter generator has a period of `2**(b*k)`.
-This is a "perfectly efficient" generator period period, where our period is 100% of our state bits.
+If each internal generator digit is a `b`-bit LCG (with a period of `2**b`), our combined `k`-digit counter generator can output `2**(b*k)` individual outputs (in blocks of `k` at a time) before looping.
+This is a "perfectly efficient" generator period, where our period is 100% of our state bits.
 
-Also, the normal formula for jumping an LCG's position doesn't work with this digit generator.
-The formula doesn't have any way to account for the carry interaction from one digit to the next.
-Then again, if you don't care about it being exactly perfect, you could still run the jump operation on any or all of the digits to just get "somewhere else far away in the sequence".
+Unfortunately we do lose something by using this technique: the normal formula for jumping an LCG's position doesn't work with this combined digit generator.
+Each individual digit is a normal LCG, but the position jump formula doesn't tell us if a jump passed over 0 or not, so we don't know when we should advane the next higher digit by the extra amount.
 
 ## Xor Array Generator
 
