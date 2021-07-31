@@ -575,10 +575,9 @@ Each individual digit is a normal LCG, but the position jump formula doesn't tel
 
 ## Xor Array Generator
 
-Having a Digit Counter Generator with block output is fine sometimes.
+Having a Digit Counter Generator with block output is fine for some of our `k`-dimensional needs.
 On the other hand, we might want a generator that has normal "one value at a time" output,
-and just *happens* to also provide `k`-dimensional equidistribution as well.
-
+and just *happens* to also provide `k`-dimensional equidistribution as well if we use it that way.
 Like I said, the PCG paper has a second extension scheme we can use for this situation.
 
 This time our generator will be fundamentally "one" generator, with only one `position` value.
@@ -595,26 +594,27 @@ pub struct ExtensionArray_GenericLcg64_32<const MUL: u64, const ADD: u64, const 
 }
 ```
 
-Now every time we would output a value from the generator we're going to `xor` the value with an element from the extension array.
-We'll select which extension array slot at random by using bits from our `position`.
-If we want the slot usage to be very predictable we can use the lowest bits, otherwise we can use the highest bits.
-This is why `K` should be a power of 2.
-When `K` is a power of two, it's easy to use the highest or lowest bits from `position` to make an unbiased index into the extension array.
-If `K` isn't a power of two we can use `%` to get some of the lowest bits and have *something* that's a valid index, but the index selection would become biased.
+Now every time we *would* output a value from the generator, instead we're going to `xor` the value with an element from the extension array.
+We'll select an extension array index at random by using bits from our `position`.
+If we want the index picked to be very predictable we can use the lowest bits which are very regular.
+Alternately we can use the highest bits and get a less predictable index.
+For our code, we'll use `%` to turn the `position` value into a value from 0 to `K-1`.
+This is why we want `K` to be a power of two.
+If `K` is a power of two, our `%` operation (very slow) will be optimized into a bitand operation instead (very fast).
+Also, the index we get will be selected in a uniform way.
+If `K` is not a power of two we'll have to do an actual modulus division, and the index will not be uniform.
 
-So far it's kinda like we've just mixed `K` different output sequences together.
-One per extension array slot, right?
-If we `xor` the intermediate output value with an extension array value, that obviously changes the output.
-If we were to *always* `xor` with the same extension array slot, then we'd have a standard output sequence changed to some new ordering of values.
-When we select different extension array slots per output, it's like we're jumping between several different output sequences.
-
-That's not enough for `k`-dimensional equidistribution.
+So far with doing this `xor` step thing it's kinda like we've mixed `K` different output sequences together.
+When we `xor` all the values in an output sequence with some other value, it changes the apparent ordering of the sequence.
+If we've got `K` differnet values to `xor` with, we're mixing `K` differnet sequences together.
+By itself that's not enough for `k`-dimensional equidistribution.
 
 The final thing we need is a way to "advance" the extension array at some regular interval.
-We must advance the extension array *at least* once per `position` period, and we could advance it more often if we like as long as the interval is regular.
-We also need our "advance" operation to be something that causes the array to go through a full period.
+We must "advance" the extension array *at least* once per `position` period.
+It's also possible to advance the array more often, as long as the interval is regular.
+This "advance" operation to be something that causes all the array state bits to go through a full period.
 
-Since we already talked about the digit generator, we can use a system like that for advancing the array.
+Since we already talked about the digit generator, we can use a similar system for advancing the array.
 This time we can just use "+1" as the "per digit" advancement system for simplicity.
 
 ```rust
@@ -643,9 +643,9 @@ However, it does let us jump forward and back by X many base periods by just add
 Having a way to cheaply jump around is kinda neat.
 If you don't care about being able to cheaply jump, and in easy multiples, you can use an alternate update scheme.
 For example, we could add 1431655765 instead.
-Alternately written as `0x55555555` or `0b01010101_01010101_01010101_01010101`, it'll cause many more bits to change compared to adding 1 (at least on average).
+Alternately written as `0x55555555` or `0b01010101_01010101_01010101_01010101`, this constant will cause many more bits to change compared to adding just 1 (at least on average).
 Or maybe you don't even add a value at all.
-You could run some permutation function on the bits.
+You could run some other alteration on the bits.
 Like I said, any way of updating the array is fine as long as the array update scheme lets the array have a full period cycle.
 
 The Xor Array generator has an absurdly large period, the same as the Digit Counter generator.
@@ -666,7 +666,7 @@ The PCG family uses the idea that if we apply a "permutation" to the raw LCG out
 If you go and read the full [PCG paper][pcg-paper] you'll see that there isn't just one permutation function provided.
 Instead, there's several suggested permutation building blocks that you can mix together.
 
-All the building blocks have fancy initials for short because you're expected to combine more than one of them together.
+All the building blocks have fancy initials for short because you're expected to combine more than one of them together and be able to name that combination.
 
 * **Random Shift (RS):** We use the top bits (the best) to determine how much to shift the next (still mostly good) bit by, then keep those.
 * **Random Rotation (RR):** Similar to the shift, but we use a randomized rotation instead of a shift.
@@ -716,8 +716,6 @@ pub const fn xsl_rr_rr_u128(x: u128) -> u128 {
 }
 ```
 
-So instead of doing a left shift and truncate, we'd do one of these.
-
 ## Building A Pcg
 
 Actually putting one of these PCG things together is about 98% the same as how an LCG works.
@@ -766,9 +764,73 @@ TODO
 
 TODO
 
+-->
+
 # Generating Bounded Integers
 
-TODO
+Alright we've looked at the PCG paper, and we saw on <pcg-random.org> that there's a post about how to setup `TestU01`.
+Are there any other blog posts that can help us?
+Ah, "[Efficiently Generating a Number in a Range](https://www.pcg-random.org/posts/bounded-rands.html)", that sounds great.
+I love to efficiently verb.
+
+I don't want to just copy that whole blog post into here so you should read go read the post.
+If you absolutely refuse to do that the basic idea is that if we have an unbiased source of random integers and we want to get those integers into a smaller range, we have to be careful about how we do it.
+If we're not careful we can introduce bias where there wasn't any before.
+
+So the post has a lot of ways to get a number into the range `0 .. x`.
+If your range doesn't actually start from 0 you can get a `0 .. x` number and just add an offset.
+Some methods are baised, some are unbaised, lots of options.
+It's nice to have options, but what's better is to have *benchmarks* of those options.
+Looking over the benchmark results, it's clear that we do pay a small price to have out unbiased results.
+However, that price that we pay is extremely small.
+Small enough that we're going to pick an unbiased solution.
+
+The general technique of how we get an unbiased result is that we're going to generate a random value then check it.
+If the value doesn't fit some sort of threshold we discard it and generate another value.
+
+<!--
+* **"Debiased Integer Multiplication (Lemire):**
+  With this style our threshold is going to be the number of possible values in the range type `%` the number of values in the range.
+  This is slightly tricky to compute because an integer type can't hold its number of possible value, it can only go up to one less than that.
+  We could compute the threshold using the next bigger type, but that's generally slower as your types get bigger.
+  With a little bit of bitwise math hackery it turns out we can replace the expression `2**BITS % range` with `range.wrapping_neg() % range`.
+  Alright, got our threshold, next we get a PRNG output.
+  We multiply the generator output with the range value *in the next higher unsigned int type*.
+  So if we've got `u32` PRNG output and range size, we'd do a `u64` multiply.
+  If the *lower half* of the multiply output is *less* than the threshold we go again.
+  Otherwise, we shift down the *upper half* of the multiply output and it will be in range.
+
+Honestly, I somehow didn't believe that it worked when I read it.
+Sounds just too strange to be true.
+So I put together a little test at `u8` scale and then tried out a few range values.
+For each range value I tried every possible `u8` as a generator output and checked them all.
+Turns out it does work after all.
+
+```rust
+#[test]
+fn lemire_debiased_mul_u8() {
+    for range in [5_u8, 24, 100, 254, 255] {
+        let threshold = range.wrapping_neg() % range;
+        for rng_out in 0..=u8::MAX {
+            let mult_val = (rng_out as u16) * (range as u16);
+            let low_bits = mult_val as u8;
+            if low_bits >= threshold {
+                assert!(((mult_val >> 8) as u8) < range);
+            }
+        }
+    }
+}
+```
+-->
+
+<!--
+https://lemire.me/blog/2019/06/06/nearly-divisionless-random-integer-generation-on-various-systems/
+
+https://arxiv.org/pdf/1805.10941.pdf
+-->
+
+
+<!--
 
 # Generating Normalized Floats
 
