@@ -771,40 +771,99 @@ TODO
 Alright we've looked at the PCG paper, and we saw on <pcg-random.org> that there's a post about how to setup `TestU01`.
 Are there any other blog posts that can help us?
 Ah, "[Efficiently Generating a Number in a Range](https://www.pcg-random.org/posts/bounded-rands.html)", that sounds great.
-I love to efficiently verb.
+I love to efficiently verb things.
 
-I don't want to just copy that whole blog post into here so you should read go read the post.
-If you absolutely refuse to do that the basic idea is that if we have an unbiased source of random integers and we want to get those integers into a smaller range, we have to be careful about how we do it.
-If we're not careful we can introduce bias where there wasn't any before.
+The basic idea of bounded in integers is that we have a function signature like this:
 
-So the post has a lot of ways to get a number into the range `0 .. x`.
-If your range doesn't actually start from 0 you can get a `0 .. x` number and just add an offset.
-Some methods are baised, some are unbaised, lots of options.
-It's nice to have options, but what's better is to have *benchmarks* of those options.
-Looking over the benchmark results, it's clear that we do pay a small price to have out unbiased results.
-However, that price that we pay is extremely small.
-Small enough that we're going to pick an unbiased solution.
+```rust
+// example for u32, but would be the same for any unsized int type.
+// `range` should be 1 or more
+pub const fn gen_in_range(g: &mut MyU32Generator, range: u32) -> u32;
+```
 
-The general technique of how we get an unbiased result is that we're going to generate a random value then check it.
-If the value doesn't fit some sort of threshold we discard it and generate another value.
+Then `gen_in_range` will use the generator to create a value in in the range `0 .. range`.
+Exactly *how* that happens depends on the method.
+Many example methods are given in the blog post.
+
+I don't want to just repeat what the blog post says, so I'll assume that you've read it.
+
+...
+
+Right, so it looks like we've got two strong contenders for getting numbers in a range in an unbiased way.
+
+* Debiased Integer Multiplication (Lemire)
+* Bitmask with Rejection (Apple)
+
+One of these is very simple and clearly correct.
+The other one is totally wild, and how the *hell* does that work at all?
+
+I think we'll look at the simple one first.
+
+## Bitmask with Rejection
+
+Okay, for the bitmask system:
+
+1) Get a mask of all the bits that might be used in a valid output.
+2) Call the generator and apply the mask to its output.
+3) If the number is in range then return it, otherwise do step 2 again.
+
+```rust
+// note: for this example we're using `FnMut() -> u32` as a PRNG stand in.
+
+pub fn bitmask_reject_u32(mut f: impl FnMut() -> u32, range: NonZeroU32) -> u32 {
+    let mask = u32::MAX >> ((range.get() - 1) | 1).leading_zeros();
+    loop {
+        let out = f() & mask;
+        if out < range.get() {
+            return out;
+        }
+    }
+}
+```
+
+I bet you're wondering about that funky `mask` calculation.
+What's happening is that we want our `mask` to be as tight as possible.
+If the mask allows in bits that are never going to be set in a valid output that just increases output rejections (which wastes time).
+We're going to count the `leading_zeroes` to see what the highest bit that's on is.
+However, there's one case where a direct call to `leading_zeros` doesn't quite give the right answer.
+If the range value is exactly a power of two it will have a `leading_zeroes` value that's one less than the `leading_zeroes` of the highest possible output.
+That means that with a power of two range we'd let in one bit more than necessary with our mask.
+Since ideally all bits are on 50% of the time, that means that we'd trigger an unnecessary output rejection 50% of the time that we had an otherwise acceptable output.
+If we instead subtract 1 and then bitor 1 we get exactly the `leading_zeros` value we need.
+
+```
+ R:     N                 ((N-1)|1)
+ 1: 0b00000001 (clz 31), 0b00000001 (clz 31)
+ 2: 0b00000010 (clz 30), 0b00000001 (clz 31) <--
+ 3: 0b00000011 (clz 30), 0b00000011 (clz 30)
+ 4: 0b00000100 (clz 29), 0b00000011 (clz 30) <--
+ 5: 0b00000101 (clz 29), 0b00000101 (clz 29)
+ 6: 0b00000110 (clz 29), 0b00000101 (clz 29)
+ 7: 0b00000111 (clz 29), 0b00000111 (clz 29)
+ 8: 0b00001000 (clz 28), 0b00000111 (clz 29) <--
+ 9: 0b00001001 (clz 28), 0b00001001 (clz 28)
+10: 0b00001010 (clz 28), 0b00001001 (clz 28)
+11: 0b00001011 (clz 28), 0b00001011 (clz 28)
+12: 0b00001100 (clz 28), 0b00001011 (clz 28)
+13: 0b00001101 (clz 28), 0b00001101 (clz 28)
+14: 0b00001110 (clz 28), 0b00001101 (clz 28)
+15: 0b00001111 (clz 28), 0b00001111 (clz 28)
+16: 0b00010000 (clz 27), 0b00001111 (clz 28) <--
+```
+
+That was the whole explanation.
+It's not always the fastest but it's plenty fast and very easy to understand.
+
+## Debiased Integer Multiplication
+
+TODO
 
 <!--
-* **"Debiased Integer Multiplication (Lemire):**
-  With this style our threshold is going to be the number of possible values in the range type `%` the number of values in the range.
-  This is slightly tricky to compute because an integer type can't hold its number of possible value, it can only go up to one less than that.
-  We could compute the threshold using the next bigger type, but that's generally slower as your types get bigger.
-  With a little bit of bitwise math hackery it turns out we can replace the expression `2**BITS % range` with `range.wrapping_neg() % range`.
-  Alright, got our threshold, next we get a PRNG output.
-  We multiply the generator output with the range value *in the next higher unsigned int type*.
-  So if we've got `u32` PRNG output and range size, we'd do a `u64` multiply.
-  If the *lower half* of the multiply output is *less* than the threshold we go again.
-  Otherwise, we shift down the *upper half* of the multiply output and it will be in range.
+https://play.rust-lang.org/?version=stable&mode=release&edition=2018&gist=6408905239ef0320c71acc7662e92eb7
 
-Honestly, I somehow didn't believe that it worked when I read it.
-Sounds just too strange to be true.
-So I put together a little test at `u8` scale and then tried out a few range values.
-For each range value I tried every possible `u8` as a generator output and checked them all.
-Turns out it does work after all.
+https://lemire.me/blog/2019/06/06/nearly-divisionless-random-integer-generation-on-various-systems/
+
+https://arxiv.org/pdf/1805.10941.pdf
 
 ```rust
 #[test]
@@ -820,13 +879,6 @@ fn lemire_debiased_mul_u8() {
         }
     }
 }
-```
--->
-
-<!--
-https://lemire.me/blog/2019/06/06/nearly-divisionless-random-integer-generation-on-various-systems/
-
-https://arxiv.org/pdf/1805.10941.pdf
 -->
 
 
