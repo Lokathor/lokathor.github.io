@@ -778,7 +778,7 @@ The basic idea of bounded in integers is that we have a function signature like 
 ```rust
 // example for u32, but would be the same for any unsized int type.
 // `range` should be 1 or more
-pub const fn gen_in_range(g: &mut MyU32Generator, range: u32) -> u32;
+pub const fn gen_in_range(mut rng: impl FnMut() -> u32, range: u32) -> u32;
 ```
 
 Then `gen_in_range` will use the generator to create a value in in the range `0 .. range`.
@@ -786,8 +786,7 @@ Exactly *how* that happens depends on the method.
 Many example methods are given in the blog post.
 
 I don't want to just repeat what the blog post says, so I'll assume that you've read it.
-
-...
+Go do that right now if you haven't.
 
 Right, so it looks like we've got two strong contenders for getting numbers in a range in an unbiased way.
 
@@ -856,42 +855,206 @@ It's not always the fastest but it's plenty fast and very easy to understand.
 
 ## Debiased Integer Multiplication
 
-TODO
-
-<!--
-https://play.rust-lang.org/?version=stable&mode=release&edition=2018&gist=6408905239ef0320c71acc7662e92eb7
-
-https://lemire.me/blog/2019/06/06/nearly-divisionless-random-integer-generation-on-various-systems/
-
-https://arxiv.org/pdf/1805.10941.pdf
+The second scheme that we're told is going to be quite fast is "Debiased Integer Multiplication", created by Lemire.
+When we convert the PCG Blog's version into Rust we get something like this:
 
 ```rust
-#[test]
-fn lemire_debiased_mul_u8() {
-    for range in [5_u8, 24, 100, 254, 255] {
-        let threshold = range.wrapping_neg() % range;
-        for rng_out in 0..=u8::MAX {
-            let mult_val = (rng_out as u16) * (range as u16);
-            let low_bits = mult_val as u8;
-            if low_bits >= threshold {
-                assert!(((mult_val >> 8) as u8) < range);
-            }
-        }
+pub fn bounded_rand(mut rng: impl FnMut() -> u64, range: u32) -> u32 {
+  let threshold = range.wrapping_neg() % range;
+  loop {
+    let x = rng.next_u32();
+    let m = (x as u64) * (range as u64);
+    let low_bits = m as u32;
+    if low_bits >= threshold {
+      return (m >> 32) as u32;
     }
+  }
 }
--->
+```
 
+And uh, honestly, what?
+Like, really, for real, **what?**
+Why does this work?
+Don't get me wrong it *does* work and you'll get correct results, but what is happening here?
 
-<!--
+Alright let's [google the name of this method](https://www.google.com/search?q=Debiased+Integer+Multiplication+Lemire),
+and then there's some hits, and one of them is a blog post in Lemire's own blog.
+Let's look at [Nearly Divisionless Random Integer Generation On Various Systems](https://lemire.me/blog/2019/06/06/nearly-divisionless-random-integer-generation-on-various-systems/).
+It even referrs to the PCG Blog post that we're using right now.
+Oh, it says... that we can re-arrange the code a bit to try and avoid that `%` operation most of the time.
+Interesting, always nice to avoid a division and/or modulus operation.
+More importantly at the moment though, one of the links in the blog is to [Fast Random Integer Generation in an Interval](https://arxiv.org/abs/1805.10941), a paper by Lemire.
+Let's [read that PDF](https://arxiv.org/pdf/1805.10941.pdf) and see what's going on.
+
+Only 13 pages, not bad.
+The *Introduction* so we're talking about integers in the interval `[0, s)`, which in Rust we'd write `0..s`.
+That's inclusive on the low bound (including 0) and exclusive on the upper bound (excluding `s`).
+Then we see some examples of when we might need these bounded numbers, like for shuffling an array.
+Next in *Mathematical Notation* we get some notes on how we're supposed to decode the math runes in the paper.
+A ceiling op, a floor op, we've got the grade school division sign `÷` meaing integer division (standard division and then floor).
+Nothing too weird.
+
+We do get a thing called **Lemma 2.1**:
+
+* Lemma 2.1: Given integers `a`,`b`,`s` > 0, there are exactly `(b − a) ÷ s` multiples of `s` in `[a,b)` whenever `s` divides `b−a`. More generally, there are exactly `(b−a)÷s` integers in `[a,b)` having a given remainder with `s` whenever `s` divides `b − a`.
+
+The next section is called *Existing Unbiased Techniques Found In Common Software Libraries*, which just really sets into stone that Lemire doesn't care for writing terse titles.
+Here it talks about how OpenBSD and Java do it.
+
+*Avoiding Division* is where we finally get an explanation of what's going on.
+The first thing we need to be aware of is that when we do an X-bit multiplication the "full" result is actually a (2*X)-bit result.
+If you multiply two 32-bit values, the full result is a 64-bit value.
+If you multiply two 64-bit values, the full result is a 128-bit value.
+He talks a bit about how non-Rust languages would go about getting the "high" bits from the operation.
+In Rust we have `u128` as a standard type, so for both 32-bit and 64-bit multiplications we can just cast the values into the next bigger type and do a normal multiply.
+Okay, here's the good bits, pay close attention.
+I'll put them all with bullet points because this paragraph is pretty dense.
+
+* Given an integer `x ∈ [0, 2**L)`, we have that `(x * s) ÷ 2**L ∈ [0,s)`.
+* By multiplying by `s`, we take integer values in the range `[0, 2**L)` and map them to multiples of `s` in `[0,s * 2**L)`.
+* By dividing by `2**L`, we map all multiples of `s` in `[0, 2**L)` to 0, all multiples of `s` in `[2**L, 2 * 2**L)` to one, and so forth.
+* The `(i + 1)`th interval is `[i * 2**L, (i + 1) * 2**L)`.
+* By Lemma 2.1, there are exactly `floor(2**L/s)` multiples of `s` in intervals `[i * 2**L + (2**L mod s), (i + 1) * 2**L)` since `s` divides the size of the interval `(2**L − (2**L mod s))`.
+* Thus, if we reject the multiples of `s` that appear in `[i * 2**L, i * 2**L + (2**L mod s))`, we get that all intervals have exactly `floor(2**L/s)` multiples of `s`.
+
+This lets us write **Lemma 4.1**:
+
+* Lemma 4.1. Given any integer `s ∈ [0, 2**L)`, we have that for any integer `y ∈ [0,s)`, there are exactly `floor(2**L/s)` values `x ∈ [0, 2**L)` such that `(x * s) ÷ 2**L = y` and `(x * s) mod 2**L >= 2**L mod s`.
+
+That's still pretty dense.
+Let's walk through an example as we go over it.
+
+We'll do it with 8-bit values since that's easier to understand.
+So that means that `L` is 8, and we'll say that `s` is going to be 20.
+
+The *claim*: for every `x` (a random `u8` value), if we do a `u16` multiply of `x` times `s` (20), then divide that down by `2**L` (256), we'll get a value in the range `0..s` (`0..20`).
+
+For each possible `u8` value that `x` might be, when full multiplied by `s` (20), we get an intermediate `u16` value `m`.
+Here's a chart of what we might get:
+
+| x | m=x*20 |
+|:-:|:-:|
+| 0 | 0 |
+| 1 | 20 |
+| 2 | 40 |
+| ... | ... |
+| 255 | 5100 |
+
+What if `s` was any bigger?
+It could easily be bigger than 20, what if it's so big we overflow a `u16` and cause trouble?
+That's not a concern with the way we're doing it: the random number and the random number range have to be the same type.
+In other words, with random `u8` values, the biggest possible `s` value is 255.
+It's easy to check that 255 * 255 = 65025, which fits into a `u16`.
+More generally if you multiply the maximum value of any X-bit number it will always still fix into a 2X-bit value.
+This means that `s` can be any size that fits into the type without worry.
+
+After the multiply, there's a division by `2**L` (256).
+This maps the `m` values back into the final range `0..s`.
+Let's look at another mini chart:
+
+| x | m=x*20 | out=m/256 |
+|:-:|:-:|:-:|
+| 0 | 0 | 0 |
+| 1 | 20 | 0 |
+| ... | ... | ... |
+| 12 | 240 | 0 |
+| 13 | 260 | 1 |
+| 14 | 280 | 1 |
+| ... | ... | ... |
+| 25 | 500 | 1 |
+| 26 | 520 | 2 |
+| 27 | 540 | 2 |
+| ... | ... | ... |
+| 255 | 5100 | 19 |
+
+But not all of the outputs will appear an equal number of times ([playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2018&gist=979a0d4971e533c08ef693b810e14473)):
+
+| out | # of times |
+|:-:|:-:|
+| 0 | 13 |
+| 1 | 13 |
+| 2 | 13 |
+| 3 | 13 |
+| 4 | **12** |
+| 5 | 13 |
+| 6 | 13 |
+| 7 | 13 |
+| 8 | 13 |
+| 9 | **12** |
+| 10 | 13 |
+| 11 | 13 |
+| 12 | 13 |
+| 13 | 13 |
+| 14 | **12** |
+| 15 | 13 |
+| 16 | 13 |
+| 17 | 13 |
+| 18 | 13 |
+| 19 | **12** |
+
+Thus we have to apply the rejection step to some of the values.
+By Lemma 4.1: if `(x * s) mod 2**L >= 2**L mod s`, then we *keep* that `x` value.
+
+Let's have a second look at that threshold value in the Rust code above:
+
+```rust
+  let threshold = range.wrapping_neg() % range;
+```
+
+This is one of those "two ways to get to the same value" situations.
+A "bit hack" you might call it.
+Normally, to compute `2**L mod s`, you'd need to have a variable that holds `2**L` and then modulus divide by `s`.
+Except that `2**L` is going to be outside our type's range.
+For `u8`, then `2**8` would be `256`, one more than the type's maximum allowed value.
+This holds for all the other unsigned integers as well.
+Instead of having to use the next bigger unsigned integer type to do the modulus division (which ends up being even slower), we have this alternate expression.
+It gets us to the same value in the end.
+How exactly this expression was arrived at... I honestly don't know.
+It's just one of those congruence relation things that works when you're doing modulus math.
+
+If we use this rejection step then all outputs will occur exactly 12 times ([playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2018&gist=229ee5df4f57b205cefd38735062103c)).
+
+Oh, but then Lemire wanted us to do some sort of "nearly divisionless" tactic.
+Let's convert this suggested new version to Rust.
+It's using `u64` instead of `u32`, but otherwise we'll try to make it as close as possible to our first version so that we can see the differences easily:
+
+```rust
+pub fn nearly_divisionless(mut rng: impl FnMut() -> u64, range: u64) -> u64 {
+  let mut x: u64 = rng.next_u64();
+  let mut m: u128 = (x as u128) * (range as u128);
+  let mut low_bits: u64 = m as u64;
+  if low_bits < range {
+    let threshold: u64 = range.wrapping_neg() % range;
+    while low_bits < threshold {
+      x = rng.next_u64();
+      m = (x as u128) * (range as u128);
+      low_bits = m as u64;
+    }
+  }
+  (m >> 64) as u64
+}
+```
+
+We've moved the computation of the `threshold` value behind a check that `low_bits` is less than the `range`.
+This means that we can skip computing `threshold` at all in some cases, which skips a division.
+The assumption here is that `range` will always be greater than or equal to the `threshold`,
+so if `low_bits` isn't less than `range` it also can't be less than `threshold`, and we should skip computing the exact `threshold` at all.
+We can quickly [check this](https://play.rust-lang.org/?version=stable&mode=release&edition=2018&gist=f5422c7bb67966656da6781e64891409) for all possible `u8`, `u16`, and `u32` values easily in the playground.
+There's too many `u64` values to keep going, but since it holds for all the smaller unsigned in types we can be fairly confident that this is true for all the unsigned int types.
+
+## Which To Use?
+
+Going by the benchmarks in the PCG Blog, the debiased multiplication is a *little* faster better than bitmasking.
+This nearly divisionless version should be generally a little faster than the version benchmarked.
+
+However, debiased multiplication requires a full width multiplication, so for `u128` ranges we'd *need* to use the bitmasking technique.
 
 # Generating Normalized Floats
 
 TODO
 
-https://allendowney.com/research/rand/downey07randfloat.pdf
+<!-- https://allendowney.com/research/rand/downey07randfloat.pdf -->
 
 # Seeding Your Generator
 
 TODO
-
--->
