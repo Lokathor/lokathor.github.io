@@ -49,7 +49,7 @@ In other words, **do not use these generators for cryptography**.
 
 I'm serious.
 
-# Linear Congruential Generators
+## Linear Congruential Generators
 
 One of the easiest types of generator to understand and implement is the [Linear Congruential Generator][wp-lcg] (LCG). They're so simple to implement that they're used in countless programs. They're even used in pokemon!
 
@@ -57,7 +57,7 @@ One of the easiest types of generator to understand and implement is the [Linear
 
 The LCG family of generators was developed in 1958 by W. E. Thomson and A. Rotenberg, based on the slightly earlier Lehmer Generator which had been developed by D. H. Lehmer in 1951. While there *are* some problems with this type of generator, they're well understood problems that we can compensate for.
 
-## LCG Basics
+### LCG Basics
 
 The core formula of the LCG family is very simple. If you look at the wikipedia page they give it using the full fancy math notion, but the pseudocode version is:
 
@@ -132,7 +132,7 @@ impl<const MUL: u64, const ADD: u64> GenericLcg64<MUL, ADD> {
 
 Is our generator any good? Who knows! We can't even turn it on right now because we don't know what to put in for `MUL` and `ADD`.
 
-## Selecting Our LCG Parameters
+### Selecting Our LCG Parameters
 
 Let's go back to that Wikipedia page about how LCGs work. It says if we want the maximum period possible for our generator, and given that we've already selected `m=2**64`, then we need to have `ADD != 0`, and we have to make sure that we satisfy the following rules (the "Hull–Dobell Theorem"):
 
@@ -161,7 +161,7 @@ Okay so let's check out those references numbered 2 and 10:
 
 Ah, hmm, well... okay we check the most recent paper first. We want those latest and greatest numbers. Here's the [direct link to the PDF](https://arxiv.org/pdf/2001.05304.pdf) if you don't want to bother looking thought the arXiv website and finding the link yourself.
 
-### Steele / Vigna 2020
+#### Steele / Vigna 2020
 
 When reading a paper for the first time, always take a moment to double check the Abstract and the Introduction to make sure that what *you* think it's talking about and what *it* thinks its talking about are the same thing.
 
@@ -212,7 +212,7 @@ Now we can also make an alias with "simple" parameters people can go by if they 
 pub type SimpleLcg64 = GenericLcg64<0xF691B575, 0>;
 ```
 
-## Reducing The Output Size
+### Reducing The Output Size
 
 Okay, so we've got a generator, but it's *not very good* right now.
 
@@ -238,7 +238,7 @@ Note that our output is formed from the position value *before* it changes, not 
 
 Now our generator has a new name! Before our generator was an "LCG64" type, because of a 64-bit position. Now that we're just keeping the best 32 bits for the ourput it's known as an "LCG64/32". Of course there's plenty of possible multipliers and additives, so there isn't just exactly one LCG64/32. Like I said at the start, it's a whole family of potential generators.
 
-## Testing With `SmallCrush`
+### Testing With `SmallCrush`
 
 Our generator isn't the best.
 An LCG64/32 just fundamentally can't pass any of the more intense randomness test suites.
@@ -297,7 +297,7 @@ Since an LCG64/32 can't pass the stronger test batteries in TestU01 we'll skip t
 Passing `SmallCrush` is a good enough self check at this point.
 We'll switch over to talking about some fun additional things we can let our LCG do.
 
-## Jumping The Generator Position
+### Jumping The Generator Position
 
 Here's the first fun special technique that we can do with our LCG.
 If we want to send the generator forward by `delta` steps, without actually calling the generator's step function `delta` times, we can!
@@ -450,7 +450,7 @@ fn test_lcg_u64_jump() {
 
 [playground](https://play.rust-lang.org/?version=stable&mode=debug&edition=2018&gist=28aac9cb4a1e4f05b2ca1c7e8d2bac94)
 
-## Multiple Streams
+### Multiple Streams
 
 When you change the additive value it changes the ordering of all the outputs.
 If we wanted to have a little more possible variety we could have the `ADD` parameter be a field in the struct.
@@ -474,7 +474,7 @@ Still, you might want to consider it if you're looking for a little more runtime
 The downside of this generator alteration is that since the `position` is changing, but our `stream` doesn't change, we've doubled our required *state* without increasing our generator's *period*.
 At least it's a very simple change, so people can understand it without a big explanation.
 
-## Digit Counter Generator
+### Digit Counter Generator
 
 This is the first of two ways we can get `k`-dimensional equidistribution on our generator.
 Both of these are both described by M.E. O'Neill in the [PCG paper][pcg-paper].
@@ -573,7 +573,7 @@ This is a "perfectly efficient" generator period, where our period is 100% of ou
 Unfortunately we do lose something by using this technique: the normal formula for jumping an LCG's position doesn't work with this combined digit generator.
 Each individual digit is a normal LCG, but the position jump formula doesn't tell us if a jump passed over 0 or not, so we don't know when we should advane the next higher digit by the extra amount.
 
-## Xor Array Generator
+### Xor Array Generator
 
 Having a Digit Counter Generator with block output is fine for some of our `k`-dimensional needs.
 On the other hand, we might want a generator that has normal "one value at a time" output,
@@ -652,7 +652,7 @@ The Xor Array generator has an absurdly large period, the same as the Digit Coun
 With `b`-bit LCG base generators, giving `r`-bit output, and `k`-equidistribution, we get a total period of `2**(b+(r*k))`.
 As with the Digit Counter Generator, this means our period is 100% of our state bits.
 
-# Permuted Congruential Generators
+## Permuted Congruential Generators
 
 We've seen many things we can do with an LCG, and I've mentioned a thing called a "PCG" too.
 The initials PCG stand for Permuted Congruential Generator, and you can think of it as "an LCG but better".
@@ -661,7 +661,7 @@ The problem that we have with the LCG is that the bit quality drops drastically 
 Our basic answer to the problem was "only keep the top half of the bits".
 The PCG family uses the idea that if we apply a "permutation" to the raw LCG output we can get a much better output quality boost than a plain shift gives.
 
-## Permutations
+### Permutations
 
 If you go and read the full [PCG paper][pcg-paper] you'll see that there isn't just one permutation function provided.
 Instead, there's several suggested permutation building blocks that you can mix together.
@@ -716,7 +716,7 @@ pub const fn xsl_rr_rr_u128(x: u128) -> u128 {
 }
 ```
 
-## Building A Pcg
+### Building A Pcg
 
 Actually putting one of these PCG things together is about 98% the same as how an LCG works.
 
@@ -766,7 +766,7 @@ TODO
 
 -->
 
-# Generating Bounded Integers
+## Generating Bounded Integers
 
 Alright we've looked at the PCG paper, and we saw on <pcg-random.org> that there's a post about how to setup `TestU01`.
 Are there any other blog posts that can help us?
@@ -798,7 +798,7 @@ The other one is totally wild, and how the *hell* does that work at all?
 
 I think we'll look at the simple one first.
 
-## Bitmask with Rejection
+### Bitmask with Rejection
 
 Okay, for the bitmask system:
 
@@ -853,7 +853,7 @@ If we instead subtract 1 and then bitor 1 we get exactly the `leading_zeros` val
 That was the whole explanation.
 It's not always the fastest but it's plenty fast and very easy to understand.
 
-## Debiased Integer Multiplication
+### Debiased Integer Multiplication
 
 The second scheme that we're told is going to be quite fast is "Debiased Integer Multiplication", created by Lemire.
 When we convert the PCG Blog's version into Rust we get something like this:
@@ -1042,19 +1042,19 @@ so if `low_bits` isn't less than `range` it also can't be less than `threshold`,
 We can quickly [check this](https://play.rust-lang.org/?version=stable&mode=release&edition=2018&gist=f5422c7bb67966656da6781e64891409) for all possible `u8`, `u16`, and `u32` values easily in the playground.
 There's too many `u64` values to keep going, but since it holds for all the smaller unsigned in types we can be fairly confident that this is true for all the unsigned int types.
 
-## Which To Use?
+### Which To Use?
 
 Going by the benchmarks in the PCG Blog, the debiased multiplication is a *little* faster better than bitmasking.
 This nearly divisionless version should be generally a little faster than the version benchmarked.
 
 However, debiased multiplication requires a full width multiplication, so for `u128` ranges we'd *need* to use the bitmasking technique.
 
-# Generating Normalized Floats
+## Generating Normalized Floats
 
 TODO
 
 <!-- https://allendowney.com/research/rand/downey07randfloat.pdf -->
 
-# Seeding Your Generator
+## Seeding Your Generator
 
 TODO
