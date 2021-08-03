@@ -776,7 +776,7 @@ I love to efficiently verb things.
 The basic idea of bounded in integers is that we have a function signature like this:
 
 ```rust
-// example for u32, but would be the same for any unsized int type.
+// example for u32, but would be the same for any unsigned int type.
 // `range` should be 1 or more
 pub const fn gen_in_range(mut rng: impl FnMut() -> u32, range: u32) -> u32;
 ```
