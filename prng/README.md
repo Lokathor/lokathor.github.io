@@ -242,7 +242,7 @@ Now our generator has a new name! Before our generator was an "LCG64" type, beca
 
 Our generator isn't the best.
 An LCG64/32 just fundamentally can't pass any of the more intense randomness test suites.
-However, our generator *should* be able to at least pass the `SmallCrush` test suite from `TestU01`.
+However, our generator *should* be able to at least pass the `SmallCrush` test suite from the `TestU01` collection.
 Let's check our work so far.
 
 Thankfully, there's already a blog post on [how to test with TestU01][how-to-test-with-TestU01], so we'll mostly go by that. One minor problem: TestU01 is a C library. I don't want to bother with making it callable from Rust and all that, so for our quick test we'll just adapt the sample C program in the blog post into one that runs our LCG64/32. I'm not really a C programmer, but I know enough to do this little bit.
@@ -770,7 +770,7 @@ TODO
 
 Alright we've looked at the PCG paper, and we saw on <pcg-random.org> that there's a post about how to setup `TestU01`.
 Are there any other blog posts that can help us?
-Ah, "[Efficiently Generating a Number in a Range](https://www.pcg-random.org/posts/bounded-rands.html)", that sounds great.
+Ah, [Efficiently Generating a Number in a Range](https://www.pcg-random.org/posts/bounded-rands.html), that sounds great.
 I love to efficiently verb things.
 
 The basic idea of bounded in integers is that we have a function signature like this:
@@ -802,9 +802,9 @@ I think we'll look at the simple one first.
 
 Okay, for the bitmask system:
 
-1) Get a mask of all the bits that might be used in a valid output.
-2) Call the generator and apply the mask to its output.
-3) If the number is in range then return it, otherwise do step 2 again.
+1. Get a mask of all the bits that might be used in a valid output.
+2. Call the generator and apply the mask to its output.
+3. If the number is in range then return it, otherwise do step 2 again.
 
 ```rust
 // note: for this example we're using `FnMut() -> u32` as a PRNG stand in.
@@ -1058,3 +1058,9 @@ TODO
 ## Seeding Your Generator
 
 TODO
+
+## Bonus Generator: wyrand
+
+TODO
+
+<!-- The neat power of wyrand is that it's a single instruction state change, so you can make it atomic. -->
