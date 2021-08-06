@@ -1051,9 +1051,77 @@ However, debiased multiplication requires a full width multiplication, so for `u
 
 ## Generating Normalized Floats
 
+Say we want to have random floating point values, `f32` or `f64`.
+Generating *any* floating point value is easy, `f32::from_bits(rng.next_u32())` and it's done.
+Same works for `f64`, you'd just call `f64::from_bits` with the output of `next_u64` instead.
+
+I can already hear the objections,
+"Lokathor, that's practically garbage data! How do I put that into the range I want?"
+Of course, of course, I'm just briefly showing what's possible.
+
+Let's back up a moment.
+We could get *any* integer value, but in practice we want a *bounded* range of integer values.
+The same holds for floats.
+We could get *any* `f32` value, but in practice we want a *bounded* range of `f32` values.
+
+### What Range Is A Good Range?
+
+What type of random float ranges should we try to support?
+
+Here we run into a problem: the distribution of float values isn't actually even.
+There's always *more* possible float values as you move toward zero than as you move away from it.
+Your math teacher might have once said something really abstract sounding like "there's an infinite number of integers", and this is true.
+Our computer's int types only encode a handful of all possible integers.
+Might be a big handful, but it's still limited.
+The same holds for floats.
+There's an infinite number of real numbers, and our computer's floating types encode only a handful of all possible real numbers.
+
+With integer types, there's a lower and upper value on the range, and *all* integers within the range are reprisented within the type.
+If we consider `u8`, the lower bound is 0, the upper bound is 255, but all possible integers in between are also allowed.
+This isn't true with floating point types.
+
+Let's compare the ranges of `f32` and `i32`:
+
+| Value | `f32` | `i32` |
+|:-|-:|-:|
+| Minimum | -3.40282347e+38 | -2147483648 |
+| Maximum | 3.40282347e+38 | 2147483647 |
+
+Each type has the same number of bits, so they have the same number of possible bit patterns.
+However, `f32` has a much bigger range than `i32` when we look at the minimum and maximum values.
+Also, `f32` allows for fractional values like 2.5, which `i32` does not.
+And there's also "not-a-number" bit patterns in `f32` (NaN for short).
+And there's also Infinity and Negative Infinity.
+And there's *even* a negative 0 value.
+Given all this, clearly some of the integer values that `i32` can reprisent exactly *cannot* be reprisented exactly in `f32`.
+Since we also know there's infinitely many fractional numbers, then it must be the case that some of those can't be reprisented exactly using `f32`.
+Even if we use `f64` instead of `f32`, the whole problem still happens, just with bigger values.
+
+Which brings us back to the question we started with: what sort of random range do we want?
+With integer ranges, we only actually supported 0 to N.
+If you wanted a non-zero starting point we said you should use 0 to N and then apply an offset.
+For floats we want to pick as small a range as we can.
+This makes our proportion of actually representable values within the range be as high as possible.
+However, if the range is too small it's harder to actually use.
+
+Most people expect to be able to get "normalized" or "unit" float values, in the 0.0 to 1.0 range.
+We can also trivially support having a random sign bit, so -1.0 to 1.0 is possible as well.
+If you want any other kind range you can use multiplication and addition to adjust the unit value.
+
+### Float Reprisentation Review
+
+You may be wondering why there's more reprisentable floats the closer we ge to 0.0,
+or maybe why it's so simple to have a random sign bit (and thus two possible basic float ranges).
+Let's review how floats are encoded at the bit level.
+I read [this page](http://cstl-csm.semo.edu/xzhang/Class%20Folder/CS280/Workbook_HTML/FLOATING_tut.htm) as a refresher before writing this part.
+There's also a handy browser page for checking the exact bit representation of float values called [Float Toy](https://evanw.github.io/float-toy/), which you can use to follow along with what I'm about to say.
+
 TODO
 
-<!-- https://allendowney.com/research/rand/downey07randfloat.pdf -->
+<!-- 
+
+
+https://allendowney.com/research/rand/downey07randfloat.pdf -->
 
 ## Seeding Your Generator
 
