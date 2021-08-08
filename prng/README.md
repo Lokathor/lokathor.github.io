@@ -452,9 +452,14 @@ fn test_lcg_u64_jump() {
 
 ### Multiple Streams
 
-When you change the additive value it changes the ordering of all the outputs.
-If we wanted to have a little more possible variety we could have the `ADD` parameter be a field in the struct.
-That way the user could select which stream of numbers they were going through at runtime instead of having a compile time selected `ADD`.
+When you change the additive value of your LCG it changes the ordering of all the outputs.
+If we wanted to have more than one generator we might want each one to have its own output order as well as its own position.
+The particular output ordering of a particular generator is the "stream" of the generator.
+
+We can already have different output streams with different const generic values,
+but that also makes generators from separate output streams totally separate types.
+If we wanted our generators to still count as the same type of value, we can move the `ADD` const generic to be a field of our struct.
+This also lets us select the stream at runtime instead of only being able to pick at compile time.
 
 ```rust
 pub struct MultiStream_GenericLcg64_32<const MUL: u64> {
@@ -474,17 +479,20 @@ impl<const MUL: u64> MultiStream_GenericLcg64_32<MUL> {
           stream: (stream<<1) | 1,
         }
     }
+    pub fn next_u32(&mut self) -> u32 {
+        let out = (self.position >> 32) as u32;
+        self.position = self.position.wrapping_mul(MUL).wrapping_add(self.stream);
+        out
+    }
 }
 ```
 
-Nothing much changes with this multi-stream generator.
-Anywhere we'd use `(ADD<<1)|1` we instead use `self.stream`.
-We ensure that `self.stream` is odd in the `new` method, and then after that it never changes.
-If we had other ways to make the generator they'd also need to ensure an odd stream value.
-If the stream value somehow ends up not being odd it's not the end of the world.
-Ihe period of the generator gets slightly smaller is all (it goes from `2**BITS` down to `2**(BITS-2)`).
+We ensure that `self.stream` is odd in the `new` method using the same pattern as before.
+After we set it up it never needs to change again.
 
-Overall moving a const generic into a struct field is a fairly obvious transformation.
+Also, if we had a jump function it would use `self.stream` instead of `(ADD<<1)|1`.
+
+Moving a const generic into a struct field is a fairly obvious transformation, so I don't think we need to write out every part of it.
 Still, you might want to consider this if you're looking for a little more runtime variety without too much additional code complexity.
 
 The downside of this generator alteration is that since the `position` is changing, but our `stream` doesn't change, we've doubled our required *state* without increasing our generator's *period*.
@@ -786,12 +794,10 @@ TODO
 
 ## Generating Bounded Integers
 
-Alright we've looked at the PCG paper, and we saw on <pcg-random.org> that there's a post about how to setup `TestU01`.
+Alright we've looked at the PCG paper, and we saw on [pcg-random.org](pcg-random.org) that there's a post about how to setup `TestU01`.
 Are there any other blog posts that can help us?
-Ah, [Efficiently Generating a Number in a Range][gen-in-range], that sounds great.
+Ah, [Efficiently Generating a Number in a Range](https://www.pcg-random.org/posts/bounded-rands.html) sounds great.
 I love to efficiently verb things.
-
-[gen-in-range]: https://www.pcg-random.org/posts/bounded-rands.html
 
 The basic idea of bounded in integers is that we have a function signature like this:
 
