@@ -788,8 +788,10 @@ TODO
 
 Alright we've looked at the PCG paper, and we saw on <pcg-random.org> that there's a post about how to setup `TestU01`.
 Are there any other blog posts that can help us?
-Ah, [Efficiently Generating a Number in a Range](https://www.pcg-random.org/posts/bounded-rands.html) sounds great.
+Ah, [Efficiently Generating a Number in a Range][gen-in-range], that sounds great.
 I love to efficiently verb things.
+
+[gen-in-range]: https://www.pcg-random.org/posts/bounded-rands.html
 
 The basic idea of bounded in integers is that we have a function signature like this:
 
