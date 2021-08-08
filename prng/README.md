@@ -567,8 +567,7 @@ impl<const MUL: u64, const ADD: u64, const DIGITS: usize>
 ```
 
 In addition to having the `k`-dimensional equidistribution that we were after, this generator will have a *very* large period.
-If each internal generator digit is a `b`-bit LCG (with a period of `2**b`), our combined `k`-digit counter generator can output `2**(b*k)` individual outputs (in blocks of `k` at a time) before looping.
-This is a "perfectly efficient" generator period, where our period is 100% of our state bits.
+With a `b`-bit LCG per digit (period of `2**b`), our combined `k`-digit generator has a period of `2**(b*k)` blocks produced.
 
 Unfortunately we do lose something by using this technique: the normal formula for jumping an LCG's position doesn't work with this combined digit generator.
 Each individual digit is a normal LCG, but the position jump formula doesn't tell us if a jump passed over 0 or not, so we don't know when we should advane the next higher digit by the extra amount.
@@ -648,9 +647,12 @@ Or maybe you don't even add a value at all.
 You could run some other alteration on the bits.
 Like I said, any way of updating the array is fine as long as the array update scheme lets the array have a full period cycle.
 
-The Xor Array generator has an absurdly large period, the same as the Digit Counter generator.
-With `b`-bit LCG base generators, giving `r`-bit output, and `k`-equidistribution, we get a total period of `2**(b+(r*k))`.
-As with the Digit Counter Generator, this means our period is 100% of our state bits.
+The Xor Array generator also has a very large period.
+With a `b`-bit LCG base generator, `r`-bit xor array elements, and `k` array slots, we get a total period of `2**(b+(r*k))`.
+This is 100% of our state bits, just like the Digit Counter Generator had.
+However, the Xor Array generator only produes a single element per generator step, not a block of `k` elements per step.
+This makes the Xor Array worse at bulk generation, if that's your primary goal.
+On the other hand, if you want a generator that's "mostly normal", but can offer `k`-dimensional output when needed, the Xor Array generator is a good compromise.
 
 ## Permuted Congruential Generators
 
@@ -1020,18 +1022,18 @@ It's using `u64` instead of `u32`, but otherwise we'll try to make it as close a
 
 ```rust
 pub fn nearly_divisionless(mut rng: impl FnMut() -> u64, range: u64) -> u64 {
-  let mut x: u64 = rng.next_u64();
-  let mut m: u128 = (x as u128) * (range as u128);
-  let mut low_bits: u64 = m as u64;
-  if low_bits < range {
-    let threshold: u64 = range.wrapping_neg() % range;
-    while low_bits < threshold {
-      x = rng.next_u64();
-      m = (x as u128) * (range as u128);
-      low_bits = m as u64;
+    let mut x: u64 = rng();
+    let mut m: u128 = (x as u128) * (range as u128);
+    let mut low_bits: u64 = m as u64;
+    if low_bits < range {
+        let threshold: u64 = range.wrapping_neg() % range;
+        while low_bits < threshold {
+            x = rng();
+            m = (x as u128) * (range as u128);
+            low_bits = m as u64;
+        }
     }
-  }
-  (m >> 64) as u64
+    (m >> 64) as u64
 }
 ```
 
@@ -1093,7 +1095,7 @@ Also, `f32` allows for fractional values like 2.5, which `i32` does not.
 And there's also "not-a-number" bit patterns in `f32` (NaN for short).
 And there's also Infinity and Negative Infinity.
 And there's *even* a negative 0 value.
-Given all this, clearly some of the integer values that `i32` can reprisent exactly *cannot* be reprisented exactly in `f32`.
+Given all this, clearly some of the integer values that `i32` can represent exactly *cannot* be reprisented exactly in `f32`.
 Since we also know there's infinitely many fractional numbers, then it must be the case that some of those can't be reprisented exactly using `f32`.
 Even if we use `f64` instead of `f32`, the whole problem still happens, just with bigger values.
 
@@ -1108,27 +1110,207 @@ Most people expect to be able to get "normalized" or "unit" float values, in the
 We can also trivially support having a random sign bit, so -1.0 to 1.0 is possible as well.
 If you want any other kind range you can use multiplication and addition to adjust the unit value.
 
-### Float Reprisentation Review
+### Binary Float Representation Review
 
-You may be wondering why there's more reprisentable floats the closer we ge to 0.0,
-or maybe why it's so simple to have a random sign bit (and thus two possible basic float ranges).
-Let's review how floats are encoded at the bit level.
-I read [this page](http://cstl-csm.semo.edu/xzhang/Class%20Folder/CS280/Workbook_HTML/FLOATING_tut.htm) as a refresher before writing this part.
-There's also a handy browser page for checking the exact bit representation of float values called [Float Toy](https://evanw.github.io/float-toy/), which you can use to follow along with what I'm about to say.
+In a previous draft I went *way* into the details of how binary floats are reprisented.
+It ended up being a little overkill, and not helpful to our goal of PRNG stuff.
+Instead, I'll just throw out the list of the links that I read when reviewing the subject myself.
 
-TODO
+* [This tutorial](http://cstl-csm.semo.edu/xzhang/Class%20Folder/CS280/Workbook_HTML/FLOATING_tut.htm) for some university class.
+* [Float Toy](https://evanw.github.io/float-toy/) lets you manipulate a bit pattern and see the parts and the output.
+* The [Rust Reference](https://doc.rust-lang.org/stable/reference/types/numeric.html#floating-point-types) page which specifies that `f32` and `f64` follow the IEEE 754-2008 spec for `binary32` and `binary64` values.
 
-<!-- 
+### Generating Values In Our Range
 
+The simple way to generate an `f32` in 0.0 to 1.0 is usually written as something like:
 
-https://allendowney.com/research/rand/downey07randfloat.pdf -->
+```rust
+let f = (rng.next_u32() as f32) / (u32::MAX as f32);
+```
+
+The idea of this technique is that since the numerator is 0 to u32::MAX, and the denominator is u32::MAX, then the output will be 0.0 to 1.0.
+And you do get values in that range.
+However, the distribution of the values is all garbage.
+This is because of that binary reprisentation of floats stuff that I just told you to review.
+
+A binary float is a sign bit, some exponent bits, and some fraction bits.
+It all gets multiplied together to form a number (assuming that it's a real number bit pattern).
+Since the exponent bits are base 2, that means that every power of two has as many values between 0.0 and that value as are above that value.
+Plenty of big integers can't be exactly represented by a float of equivalent bits at all.
+
+```rust
+// u32::MAX is 4294967295
+// but this just prints "4294967300" twice
+fn main() {
+    println!("{}", u32::MAX as f32);
+    println!("{}", (u32::MAX-1) as f32);
+}
+```
+
+So even though values will be in range with a division like this, the distribution will be completely horrible.
+Plenty of values in 0.0 to 1.0 won't have a chance of being in the output when you use the simple division method.
+
+This brings us around to a short paper called [Generating Pseudo-random Floating-Point Values](https://allendowney.com/research/rand/downey07randfloat.pdf).
+Our good friend `orlp` on Github pointed me to this one.
+It looks at this exact problem and then (this is the part I like the most) it describes an easy to implement solution.
+To understand what it does you need to have at least a basic understanding of binary floats.
+This is your last chance if you haven't read that other stuff yet.
+
+The technique described in the paper works in three stages.
+
+1. First we need a random exponent.
+   For this part we don't want our usual uniform distribution of just grabbing some number of bits directly from the generator's output.
+   Instead we'll follow a [binomial distribution](https://en.wikipedia.org/wiki/Binomial_distribution).
+   Starting from an exponent of -1, we'll check one bit at a time from our randomness.
+   Each time a bit is 0 we subtract one from our exponent and loop again.
+   When we see a bit that's 1, or when we hit the minimum exponent, we stop.
+   Alternately, we could look for 1s and stop on a 0, and we'd get the same distribution.
+   It can be faster to look for 0s on x86 and x86_64, so we'll go with
+2. Second we need a random mantissa.
+   For this part we *do* use a uniform distribution.
+   We simply call the generator, and then mask down to the correct number of bits.
+3. Third, if the mantissa value is 0, then we add one back on to our exponent 50% of the time.
+   This final step is what lets us (very rarely) get an exponent of 0.
+
+For our version, I think we'll make the mantissa value first.
+Since the mantissa can affect the exponent generation, but doesn't depend on anything itself, it just makes the most sense to me to do that part first.
+Also, it will help us avoid calling the generator too many times.
+Not only for speed benefits, which are nice, but also because we don't know if our generator will be multi-dimensional equidistributed (most aren't).
+
+Another thing, the paper is concerned with making values of `[0.0, 1.0]` (inclusive at both ends),
+but if we also use a random bit to determine the sign bit of our output then we can produce values in the range `[-1.0, 1.0]` without changing anything else.
+We'll do this with const generics so that people who are after the `[0.0, 1.0]` range don't see any performance loss.
+When the function is monomorphized the optimizer will cut the dead code and redundant ops that deal with sign bit stuff.
+
+```rust
+pub fn gen_unit_f32<const SIGNED: bool>(mut rng: impl FnMut() -> u32) -> f32 {
+    const MANTISSA_BIT_COUNT: u32 = f32::MANTISSA_DIGITS - 1;
+    const MANTISSA_MASK: u32 = (1_u32 << MANTISSA_BIT_COUNT) - 1;
+    const EXPONENT_SHIFT: u32 = 32 - 1 - MANTISSA_BIT_COUNT;
+    const SIGN_SHIFT: u32 = 31;
+
+    let mut bits: u32 = rng();
+    let mut bit_count = 32;
+
+    // generate mantissa, but keep spare bits stored to reduce generator calls
+    debug_assert!(bit_count >= MANTISSA_BIT_COUNT);
+    let mantissa: u32 = bits & MANTISSA_MASK;
+    bits >>= MANTISSA_BIT_COUNT;
+    bit_count -= MANTISSA_BIT_COUNT;
+
+    // determine our initial exponent value
+    let mut exponent: u32 = (1.0_f32.to_bits() >> MANTISSA_BIT_COUNT) - 1;
+    debug_assert!(bit_count >= 1);
+    if mantissa == 0 {
+        if (bits & 1) != 0 {
+            exponent += 1;
+        }
+        bits >>= 1;
+        bit_count >>= 1;
+    }
+
+    // consume bits until we see a 1,
+    // then decrease our exponent by the number of 0s we saw.
+    'x: loop {
+        if bits != 0 {
+            let bits_consumed = bits.trailing_zeros() + 1;
+            debug_assert!(bit_count >= bit_count);
+            bits >>= bits_consumed;
+            bit_count -= bits_consumed;
+            //
+            exponent = exponent.saturating_sub(bits_consumed);
+            break 'x;
+        } else {
+            let bits_consumed = bit_count;
+            bits = rng();
+            bit_count = 32;
+            //
+            exponent = exponent.saturating_sub(bits_consumed);
+            continue 'x;
+        }
+    }
+
+    // if the caller requested a sign bit then compute that.
+    let sign_bit: u32 = if SIGNED {
+        if bit_count == 0 {
+            ((rng() as i32) < 0) as u32
+        } else {
+            bits & 1
+        }
+    } else {
+        0
+    };
+
+    let out = f32::from_bits((sign_bit << SIGN_SHIFT) | (exponent << EXPONENT_SHIFT) | mantissa);
+    debug_assert!(out.is_finite());
+    out
+}
+```
 
 ## Seeding Your Generator
 
-TODO
+The process of picking the initial data bits for your generator is called "seeding" the generator.
+
+Sometimes you might want to use a specific seed to re-create a specific situation.
+This isn't complicated, you just set the generator state to whatever intensional seed you want.
+
+The rest of the time you don't have a specific seed in mind, and you usually want a totally unpredictable seed.
+
+I'm not normally one to suggest that you use a crate, but the [getrandom](https://docs.rs/getrandom) crate is a quick and effective solution.
+It takes a `&mut [u8]` to fill and then puts random bytes in there.
+The details depend on the OS, but it will usually call out to some sort of CSPRNG to get you your bytes.
+Regardless of exactly how big your generator is, you can get however many random bytes and set all the fields to random data.
 
 ## Bonus Generator: wyrand
 
-TODO
+We've seen the LCG and PCG stuff, but there's many more generators out there as well.
 
-<!-- The neat power of wyrand is that it's a single instruction state change, so you can make it atomic. -->
+One generator that's interesting is called "wyrand".
+It's part of the [wyhash](https://github.com/wangyi-fudan/wyhash) library.
+The basic generator, when converted to Rust, looks something like this:
+
+```rust
+/// returns (next_state, output)
+pub fn wyrand(state: u64) -> (u64, u64) {
+    let next_state = state.wrapping_add(0xA0761D6478BD642F);
+    let x = state ^ 0xE7037ED1A0B428DB;
+    let t = (state as u128).wrapping_mul(x as u128);
+    let output = ((t >> 64) as u64) ^ (t as u64);
+    (next_state, output)
+}
+```
+
+It's not entirely dissimilar from a PCG.
+There's a basic state advance, and then we improve that state with a permutation to form the final output.
+
+What makes this very interesting is that the state advance is a *single* operation.
+When something is just a single operation, that means we can do it atomically.
+This lets us build a global PRNG that's contention free.
+Here's a minimal example.
+
+```rust
+use core::sync::atomic::AtomicU64;
+use core::sync::atomic::Ordering;
+
+static GLOBAL_WYRAND: AtomicU64 = AtomicU64::new(12345);
+
+pub fn global_wyrand_set(new_state: u64) {
+    GLOBAL_WYRAND.store(new_state, Ordering::Relaxed);
+}
+pub fn global_wyrand_next_u64() -> u64 {
+    let s = GLOBAL_WYRAND.fetch_add(0xA0761D6478BD642F, Ordering::Relaxed);
+    let x = s ^ 0xE7037ED1A0B428DB;
+    let t = (s as u128).wrapping_mul(x as u128);
+    ((t >> 64) as u64) ^ (t as u64)
+}
+```
+
+## Wrap Up
+
+That's all for today.
+You hopefully have a handle on the basics of PRNG stuff.
+
+Here's the [playground link](https://play.rust-lang.org/?version=stable&mode=debug&edition=2018&gist=d4193e6ef6851b321ff102279960172b) that should hold all the major code blocks in the article.
+Assuming I didn't forget anything.
+
+Now everyone go out and flood the market with all of your own custom randomness crates.
