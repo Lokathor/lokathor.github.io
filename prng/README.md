@@ -463,13 +463,29 @@ pub struct MultiStream_GenericLcg64_32<const MUL: u64> {
 }
 ```
 
+When you construct the generator you'd assign both a `position` and a `stream`,
+but when you step the generator only the `position` will change.
+
+```rust
+impl<const MUL: u64> MultiStream_GenericLcg64_32<MUL> {
+    pub const fn new(position: u64, stream: u64) -> Self {
+        Self {
+          position,
+          stream: (stream<<1) | 1,
+        }
+    }
+}
+```
+
 Nothing much changes with this multi-stream generator.
 Anywhere we'd use `(ADD<<1)|1` we instead use `self.stream`.
-We can adjust the `stream` value to ensure that it's odd just once in the generator's constructor,
-then we don't have to repeat the shift and bitor every time we use it.
+We ensure that `self.stream` is odd in the `new` method, and then after that it never changes.
+If we had other ways to make the generator they'd also need to ensure an odd stream value.
+If the stream value somehow ends up not being odd it's not the end of the world.
+Ihe period of the generator gets slightly smaller is all (it goes from `2**BITS` down to `2**(BITS-2)`).
 
-It's a fairly obvious transformation to go from a const generic to having the value as a field in the struct.
-Still, you might want to consider it if you're looking for a little more runtime variety without too much additional code complexity.
+Overall moving a const generic into a struct field is a fairly obvious transformation.
+Still, you might want to consider this if you're looking for a little more runtime variety without too much additional code complexity.
 
 The downside of this generator alteration is that since the `position` is changing, but our `stream` doesn't change, we've doubled our required *state* without increasing our generator's *period*.
 At least it's a very simple change, so people can understand it without a big explanation.
@@ -477,7 +493,7 @@ At least it's a very simple change, so people can understand it without a big ex
 ### Digit Counter Generator
 
 This is the first of two ways we can get `k`-dimensional equidistribution on our generator.
-Both of these are both described by M.E. O'Neill in the [PCG paper][pcg-paper].
+Both of these are described by M.E. O'Neill in the [PCG paper][pcg-paper].
 One of them is described as being an LCG technique, and one is listed in the PCG section.
 Really, both of the extension techniques can be used by either type of generator.
 
