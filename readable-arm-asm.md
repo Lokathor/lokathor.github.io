@@ -68,14 +68,7 @@ Examples: `bgt`, `beq`.
 
 | asm | pseudo |
 |:-|:-|
-| `BIC Rd, Rm` | `rd &!= rm` |
-
-If a bit is set in `rm`, it will be cleared from `rd`.
-
-```
-// equivalent
-rd = rd & not(rm)
-```
+| `BIC Rd, Rm` | `rd &= !rm` |
 
 ### Comparison
 
@@ -194,12 +187,10 @@ However, the user doesn't need to care about that since (unlike with addition) n
 | `STR Rd, [Rn, #imm5_offset]` | `[rn + #imm5_offset] = rd` |
 | `STR Rd, [Rn, Rm]` | `[rn + rm] = rd` |
 | `STR Rd, [SP, #imm8_offset]` | `[sp + imm8_offset] = rd` |
-| `STRB Rd, [Rn, #imm5_offset]` | `[rn + imm5_offset].u8 = rn` |
-| `STRB Rd, [Rn, Rm]` | `[rn + rm].u8 = rd` |
-| `STRH Rd, [Rn, #imm5_offset]` | `[rn + imm5_offset].u16 = rd` |
-| `STRH Rd, [Rn, Rm]` | `[rn + rm].u16 = rd` |
-
-This is the portion of the draft I'm least happy with, but it works for now.
+| `STRB Rd, [Rn, #imm5_offset]` | `u8[rn + imm5_offset] = rn` |
+| `STRB Rd, [Rn, Rm]` | `u8[rn + rm] = rd` |
+| `STRH Rd, [Rn, #imm5_offset]` | `u16[rn + imm5_offset] = rd` |
+| `STRH Rd, [Rn, Rm]` | `u16[rn + rm] = rd` |
 
 ### Software Interrupt
 
