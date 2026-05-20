@@ -154,7 +154,7 @@ Now we'll include the "Varying" kinds of token: identifiers, number and string l
   LitNum,
   #[regex(r#""((\\")|[^"\\])*""#)]
   LitStr,
-  #[regex(r#"r#*\""#, raw_string)]
+  #[regex(r#"r#*\""#, end_raw_string)]
   LitRawStr,
   #[regex(r"///[^\r\n]*", allow_greedy = true)]
   CommentDoc,
@@ -162,4 +162,117 @@ Now we'll include the "Varying" kinds of token: identifiers, number and string l
   CommentInnerDoc,
   #[regex(r"//[^\r\n]*", allow_greedy = true)]
   CommentLine,
+```
+
+Now we put all the punctuation and keywords. There's a lot here, but it's all just "look for this fixed thing, and here's what to call it".
+
+```rust
+  /* Stuff That's Always One Thing */
+  #[regex(r"bitbag")]
+  KwBitbag,
+  #[regex(r"break")]
+  KwBreak,
+  #[regex(r"const")]
+  KwConst,
+  #[regex(r"continue")]
+  KwContinue,
+  #[regex(r"else")]
+  KwElse,
+  #[regex(r"false")]
+  KwFalse,
+  #[regex(r"fn")]
+  KwFn,
+  #[regex(r"if")]
+  KwIf,
+  #[regex(r"let")]
+  KwLet,
+  #[regex(r"loop")]
+  KwLoop,
+  #[regex(r"mmio")]
+  KwMmio,
+  #[regex(r"ram")]
+  KwRam,
+  #[regex(r"return")]
+  KwReturn,
+  #[regex(r"rom")]
+  KwRom,
+  #[regex(r"static")]
+  KwStatic,
+  #[regex(r"struct")]
+  KwStruct,
+  #[regex(r"true")]
+  KwTrue,
+
+  #[regex(r"~")]
+  Tilde,
+  #[regex(r"`")]
+  Backtick,
+  #[regex(r"!")]
+  Exclamation,
+  #[regex(r"@")]
+  AtSign,
+  #[regex(r"#")]
+  Hash,
+  #[regex(r"\$")]
+  Dollar,
+  #[regex(r"%")]
+  Percent,
+  #[regex(r"\^")]
+  Caret,
+  #[regex(r"&")]
+  Ampersand,
+  #[regex(r"\*")]
+  Asterisk,
+  #[regex(r"-")]
+  Minus,
+  #[regex(r"\+")]
+  Plus,
+  #[regex(r"=")]
+  Equal,
+  #[regex(r"\|")]
+  Pipe,
+  #[regex(r"\\")]
+  Backslash,
+  #[regex(r":")]
+  Colon,
+  #[regex(r";")]
+  Semicolon,
+  #[regex(r"'")]
+  Quote,
+  #[regex(r"<")]
+  LessThan,
+  #[regex(r",")]
+  Comma,
+  #[regex(r">")]
+  GreaterThan,
+  #[regex(r"\.")]
+  Period,
+  #[regex(r"\?")]
+  Question,
+  #[regex(r"/")]
+  Slash,
+```
+
+Finally we want some error token kinds for when things have gone wrong.
+
+* One token kind will be for when things can't lex properly. This prevents us having to work with `Result<TokenKind, ()>` in a bunch of places. It's also possible to have other error types than just `()`, but we don't want to be using `Result` *at all*, so it doesn't really matter.
+* The other will be an explicit token kind for the end of input. And any time we try to index forward in the token sequence and go out of bounds, that will also return the end of input token kind. Now we don't have to deal with `Option<TokenKind>` all over. This suggestion I didn't think of myself, it came from matklad's article.
+
+```rust
+  /// This is for when the file contains something, but the lexer doesn't know
+  /// what to call it.
+  LexerConfused,
+
+  /// Virtual token used for when looking "out of bounds" of the token stream.
+  ///
+  /// This avoids the parser internals from needing `Option<TokenKind>`.
+  EndOfFile,
+```
+
+And that's... All of our token kinds. Only a few dozen of them or so, not bad.
+
+Now we need to add that function for finding the end of a raw string.
+
+```rust
+
 ```
