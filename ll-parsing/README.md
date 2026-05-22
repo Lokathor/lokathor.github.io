@@ -269,10 +269,48 @@ Finally we want some error token kinds for when things have gone wrong.
   EndOfFile,
 ```
 
-And that's... All of our token kinds. Only a few dozen of them or so, not bad.
+And we're all done. It's a lot of variants, but we'll be able to manage.
 
-Now we need to add that function for finding the end of a raw string.
+Now we need to write that function for finding the end of a raw string.
 
 ```rust
-
+fn raw_string(lex: &mut logos::Lexer<TokenKind>) -> Option<()> {
+  let pre = lex.slice().as_bytes();
+  // Enforced by the regex.
+  debug_assert!(pre.len() >= 2);
+  debug_assert!(pre[0] == b'r' && pre[pre.len() - 1] == b'"');
+  debug_assert!(pre[1..pre.len() - 1].iter().all(|&b| b == b'#'));
+  let hashes = pre.len().checked_sub(2).unwrap();
+  let rest_str = lex.remainder();
+  // Handle the 0-hash case here since it can be done more efficiently (and
+  // doing so simplifies the loop below).
+  if hashes == 0 {
+    if let Some(idx) = rest_str.find('"') {
+      lex.bump(idx + 1);
+      return Some(());
+    } else {
+      return None;
+    }
+  }
+  let rest = rest_str.as_bytes();
+  // Look for `"###` for the right number of hashes;
+  // Turns into Some((close_quote_idx, 0)) when we see a `"`, and then counts up for each hash.
+  let mut seen_hashes = None::<(usize, usize)>;
+  for (i, &byte) in rest.iter().enumerate() {
+    if byte == b'"' {
+      seen_hashes = Some((i, 0));
+    } else if let Some(&mut (_end, ref mut n)) = seen_hashes.as_mut() {
+      if byte == b'#' {
+        *n += 1;
+        if *n == hashes {
+          lex.bump(i + 1);
+          return Some(());
+        }
+      } else {
+        seen_hashes = None;
+      }
+    }
+  }
+  None
+}
 ```
