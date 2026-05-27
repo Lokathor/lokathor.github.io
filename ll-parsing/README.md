@@ -107,6 +107,8 @@ impl Span {
 }
 ```
 
+### Logos Basics
+
 We're going to derive the `Logos` trait on `TokenKind`. Setting this up correctly has many steps. Each step is relatively small and simple, but there's still a lot of them. 
 
 First step is to add logos as a dependency:
@@ -151,6 +153,8 @@ PS: I hope you know about regex basics, because we're about to use a lot of them
 
 Also, if you're using a language that *does* care about whitespace (eg: Python or Haskell) you'd leave off the `skip` attribute and then your parser would have to gracefully handle spacing tokens all through the token stream.
 
+### Token Tree Markers
+
 Now we start specifying `TokenKind` variants. First we'll write down all the stuff that makes a "token tree". These are the markers that group tokens together, and the groups can be nested within each other, but they have to balance out or problems happen.
 
 ```rust
@@ -177,6 +181,8 @@ Having `()` and `[]` and `{}` groups is fairly expected, but *also* if we want t
 
 If your language uses `<>` to make token tree groups, then you might want to include them here with names like `OpAngle` and `ClAngle`. Since Yagbas works "like rust" most of the time, the `>` and `<` characters will often appear in math expressions "on their own", rather than being used for general token grouping. Rust only requires that `<>` balance with each other when it's specifically looking for a type expression, not all the time, so our `TokenKind` will think of them being more like just any other punctuation. It's all in how tyou think about it.
 
+### Token Kinds That Vary
+
 Now we'll include the "Varying" kinds of token: identifiers, number and string literals, and also comments. The precise rules are up to your language, but once again Yagbas tries to "be like rust" and so it should be pretty familiar.
 
 * An `Ident` is a "C-style" ident where you can use letters or numbers or underscore, but you can't *start* with a number.
@@ -202,6 +208,8 @@ Now we'll include the "Varying" kinds of token: identifiers, number and string l
   #[regex(r"//[^\r\n]*", allow_greedy = true)]
   CommentLine,
 ```
+
+#### Closing Literal Strings
 
 We'll be using [logos callbacks](https://logos.maciej.codes/callbacks.html) for the literal string and literal raw string ending logic. Literal raw strings cannot be defined in terms of just a regex, because regex doesn't allow for the `#` count matching logic. If we also use a callback for standard literal strings then we can give a more specific error than the default error when there's no closing `"`.
 
@@ -301,4 +309,76 @@ What happens if we add a tests case where we use an escaped `"` inside of our so
   assert_eq!(v[0].span.as_range(), 0..x.len());
 ```
 
-Oh hek now the tests fail. The token that comes out is only 4 bytes long, not 7. It didn't interpret the backslashes correctly. Our callback has to be smarter. Every time it finds a closing `"`, it needs to see if that's *preceeded* by some backslashes, and ignore it if so.
+Oh hek, now the tests fail. The token that comes out is only 4 bytes long, not 7. It didn't interpret the backslashes correctly. Our callback has to be smarter. Every time it finds a closing `"`, it needs to see if that's *preceeded* by some backslashes, and ignore it if so. Specifically, if an *odd* number of backslashes is just before the `"` we're looking at, then the last backslash in that group isn't an "escaped" one, and so it escapes the `"`, and so we need to skip that `"`. This isn't a normal sort of thing to be looking for, so the iterator chain to get the right number is a little goofy looking.
+
+```rust
+  loop {
+    // find a `"` in the remainder.
+    let remainder = lex.remainder();
+    match remainder.find("\"") {
+      Some(position) => {
+        // we found a `"`, advance the lexer.
+        lex.bump(position + 1);
+        // count how many `\` are on the end of the slice'd portion. when the
+        // number of backslashes is odd then the last one escapes the current
+        // double quote we've found, and we must continue the loop.
+        let end_slash_count = lex
+          .slice()
+          .as_bytes()
+          .iter()
+          .rev()
+          .skip(1)
+          .take_while(|b| **b == b'\\')
+          .count();
+        if end_slash_count % 2 != 0 {
+          continue;
+        } else {
+          return Ok(());
+        }
+      }
+      None => {
+        // when no `"` remain the litstr is unclosed, which is an error.
+        lex.bump(remainder.len());
+        return Err(TokenizerError::LitStrNoCloseQuote);
+      }
+    }
+  }
+```
+
+This lets us have several passing test cases.
+
+```rust
+  let x = "\"a\\\"bc\"";
+  v = tokenize(x).collect();
+  assert_eq!(v[0].kind, TokenKind::LitStr);
+  assert_eq!(v[0].span.as_range(), 0..x.len());
+
+  let x = "\"a\\bc\"";
+  v = tokenize(x).collect();
+  assert_eq!(v[0].kind, TokenKind::LitStr);
+  assert_eq!(v[0].span.as_range(), 0..x.len());
+
+  let x = "\"";
+  v = tokenize(x).collect();
+  assert_eq!(v[0].kind, TokenKind::LitStrNoCloseQuote);
+  assert_eq!(v[0].span.as_range(), 0..x.len());
+
+  let x = "\"\\\"";
+  v = tokenize(x).collect();
+  assert_eq!(v[0].kind, TokenKind::LitStrNoCloseQuote);
+  assert_eq!(v[0].span.as_range(), 0..x.len());
+```
+
+And finally, a reader pointed out that the `find` method is currently more efficient with single character inputs than with str inputs that are length 1. And that might get fixed some day, but let's use just a single character input for now:
+
+```rust
+    match remainder.find('"') {
+```
+
+So we can *finally* close literal strings.
+
+Now we just have to do it all over again, in a similar but slightly different way, for literal raw strings.
+
+#### Closing Literal Raw Strings
+
+todo
